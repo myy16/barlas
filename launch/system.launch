@@ -1,0 +1,8 @@
+<launch>
+  <node pkg="ika_system" type="mission_controller_node.py" name="mission_controller"/>
+  <node pkg="ika_system" type="pid_node.py" name="pid_controller"/>
+  <node pkg="ika_system" type="motor_driver_node.py" name="motor_driver"/>
+  <node pkg="ika_system" type="tabela_recognition_node.py" name="tabela_recognition"/>
+  <node pkg="ika_system" type="pan_tilt_controller_node.py" name="pan_tilt_controller"/>
+  <node pkg="ika_system" type="hough_circle_node.py" name="hough_circle"/>
+</launch>
