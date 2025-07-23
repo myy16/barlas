@@ -1,33 +1,48 @@
 """
-Mission Controller for BARS vehicle
+Mission Controller for BARLAS vehicle
 Ana kontrol merkezi - tüm sistemi koordine eder
 - Tabela tanıma sonuçlarını alır
+- Dart tanıma ve hedefleme sistemi
 - Parkur etabına göre hedefler belirler
 - PID controller'ı yönetir
 - Motor driver'a komutlar gönderir
+- Pan-Tilt kamera kontrolü
 - Güvenlik kontrollerini yapar
 """
 import time
 from motor_driver import MotorDriver
 from pid_controller import PIDController
+from dart_recognition import DartRecognition
 
 class MissionController:
     """
-    BARS aracının ana kontrol sistemi
+    BARLAS aracının ana kontrol sistemi
     Tabela tanıma → Etap belirleme → PID ayarlama → Motor kontrol
+    Dart tanıma → Hedefleme → Pan-Tilt kontrol → Otonom dart atışı
     """
     
-    def __init__(self):
+    def __init__(self, enable_dart_recognition=True):
         print("[MissionController] Sistem başlatılıyor...")
         
         # Alt sistem bileşenlerini başlat
         try:
             self.motor_driver = MotorDriver()
             self.pid_controller = PIDController()
-            print("[MissionController] Alt sistemler başarıyla başlatıldı")
+            print("[MissionController] Temel sistemler başarıyla başlatıldı")
         except Exception as e:
-            print(f"[MissionController] HATA: Alt sistem başlatılamadı - {e}")
+            print(f"[MissionController] HATA: Temel sistem başlatılamadı - {e}")
             raise
+        
+        # Dart Recognition sistemi
+        self.enable_dart_recognition = enable_dart_recognition
+        self.dart_recognition = None
+        if enable_dart_recognition:
+            try:
+                self.dart_recognition = DartRecognition()
+                print("[MissionController] Dart tanıma sistemi başlatıldı")
+            except Exception as e:
+                print(f"[MissionController] UYARI: Dart tanıma başlatılamadı - {e}")
+                self.enable_dart_recognition = False
         
         # Sistem durumu
         self.current_etap = "düz"           # Başlangıç etabı
@@ -35,6 +50,11 @@ class MissionController:
         self.current_measured_torque = 0.0  # Ölçülen tork (encoder'dan gelecek)
         self.is_running = False             # Sistem çalışıyor mu?
         self.emergency_stop = False         # Acil durdurma durumu
+        
+        # Dart hedefleme durumu
+        self.dart_targeting_mode = False    # Dart hedefleme modu aktif mi?
+        self.dart_acquired = False          # Dart hedef kilitlenmiş mi?
+        self.dart_engagement_time = 0.0     # Dart etkileşim başlangıç zamanı
         
         # Sistem performans metrikleri
         self.total_distance = 0.0           # Toplam kat edilen mesafe
@@ -179,7 +199,7 @@ class MissionController:
         """
         Sistem durumu raporu
         """
-        return {
+        status = {
             "is_running": self.is_running,
             "emergency_stop": self.emergency_stop,
             "current_etap": self.current_etap,
@@ -189,12 +209,165 @@ class MissionController:
             "motor_status": self.motor_driver.get_status(),
             "pid_status": self.pid_controller.get_status()
         }
+        
+        # Dart tanıma durumu ekle
+        if self.enable_dart_recognition and self.dart_recognition:
+            status["dart_recognition"] = {
+                "targeting_mode": self.dart_targeting_mode,
+                "dart_acquired": self.dart_acquired,
+                "target_position": self.dart_recognition.get_target_position(),
+                "is_target_acquired": self.dart_recognition.is_target_acquired()
+            }
+        
+        return status
+
+    def enable_dart_targeting(self):
+        """Dart hedefleme modunu aktif eder"""
+        if not self.enable_dart_recognition or not self.dart_recognition:
+            print("[MissionController] UYARI: Dart tanıma sistemi mevcut değil")
+            return False
+        
+        try:
+            self.dart_targeting_mode = True
+            self.dart_engagement_time = time.time()
+            
+            # Dart recognition sistemini başlat
+            if self.dart_recognition.start_recognition():
+                print("[MissionController] Dart hedefleme modu aktif")
+                return True
+            else:
+                self.dart_targeting_mode = False
+                print("[MissionController] HATA: Dart tanıma başlatılamadı")
+                return False
+                
+        except Exception as e:
+            print(f"[MissionController] Dart hedefleme hatası: {e}")
+            self.dart_targeting_mode = False
+            return False
+
+    def disable_dart_targeting(self):
+        """Dart hedefleme modunu devre dışı bırakır"""
+        self.dart_targeting_mode = False
+        self.dart_acquired = False
+        
+        if self.dart_recognition:
+            self.dart_recognition.stop_recognition()
+        
+        print("[MissionController] Dart hedefleme modu devre dışı")
+
+    def update_dart_status(self):
+        """Dart hedefleme durumunu günceller"""
+        if not self.dart_targeting_mode or not self.dart_recognition:
+            return
+        
+        # Dart kilitlenmiş mi kontrol et
+        was_acquired = self.dart_acquired
+        self.dart_acquired = self.dart_recognition.is_target_acquired()
+        
+        # Yeni hedef kilitlenmesi
+        if self.dart_acquired and not was_acquired:
+            target_pos = self.dart_recognition.get_target_position()
+            print(f"[MissionController] 🎯 DART HEDEFİ KİLİTLENDİ: {target_pos}")
+            
+        # Hedef kaybedilmesi
+        elif not self.dart_acquired and was_acquired:
+            print("[MissionController] ⚠️ Dart hedefi kaybedildi")
+
+    def engage_dart_target(self, approach_speed=30):
+        """Dart hedefine yaklaşır ve otomatik hedefleme yapar"""
+        if not self.dart_targeting_mode or not self.dart_acquired:
+            print("[MissionController] UYARI: Dart hedefi kilitlenmemiş")
+            return False
+        
+        try:
+            # Dart recognition sistemi üzerinden hedefe yaklaş
+            if self.dart_recognition.move_towards_target(speed=approach_speed):
+                print(f"[MissionController] Dart hedefine yaklaşılıyor (hız: {approach_speed})")
+                return True
+            else:
+                print("[MissionController] HATA: Hedefe yaklaşım başarısız")
+                return False
+                
+        except Exception as e:
+            print(f"[MissionController] Dart etkileşim hatası: {e}")
+            return False
+
+    def stop_dart_engagement(self):
+        """Dart hedefleme hareketini durdurur"""
+        if self.dart_recognition:
+            self.dart_recognition.stop_movement()
+        print("[MissionController] Dart etkileşimi durduruldu")
+
+    def autonomous_dart_mission(self, max_engagement_time=30):
+        """
+        Otonom dart görevi - hedefe yaklaş ve kilitle
+        
+        Args:
+            max_engagement_time: Maksimum hedefleme süresi (saniye)
+        """
+        if not self.enable_dart_targeting():
+            return False
+        
+        print("[MissionController] 🚀 OTONOM DART GÖREVİ BAŞLATILIYOR")
+        mission_start = time.time()
+        
+        try:
+            while (time.time() - mission_start) < max_engagement_time:
+                self.update_dart_status()
+                
+                if self.dart_acquired:
+                    # Hedefe yaklaş
+                    self.engage_dart_target(approach_speed=25)
+                    
+                    # Dart mesafesi kontrolü (örnek: çok yaklaşınca dur)
+                    target_pos = self.dart_recognition.get_target_position()
+                    if target_pos:
+                        # Merkez yakınında mı kontrol et (hedef kilitleme başarısı)
+                        frame_center_x = 320  # Varsayılan kamera merkezi
+                        frame_center_y = 240
+                        
+                        distance = ((target_pos[0] - frame_center_x)**2 + 
+                                  (target_pos[1] - frame_center_y)**2)**0.5
+                        
+                        if distance < 50:  # 50 piksel yakınında
+                            print("[MissionController] 🎯 HEDEF MERKEZLENDİ - Görev başarılı!")
+                            self.stop_dart_engagement()
+                            break
+                
+                else:
+                    # Hedef arama - yavaş dönüş
+                    print("[MissionController] 🔍 Dart hedefi aranıyor...")
+                    # Hafif sağa dönüş
+                    if hasattr(self.motor_driver, 'turn_right'):
+                        self.motor_driver.turn_right(20)
+                    time.sleep(0.5)
+                    self.motor_driver.stop()
+                
+                time.sleep(0.1)  # Döngü gecikmesi
+            
+            # Zaman aşımı
+            if (time.time() - mission_start) >= max_engagement_time:
+                print(f"[MissionController] ⏰ Dart görevi zaman aşımı ({max_engagement_time}s)")
+            
+        except Exception as e:
+            print(f"[MissionController] Otonom dart görevi hatası: {e}")
+        
+        finally:
+            self.disable_dart_targeting()
+            print("[MissionController] Otonom dart görevi tamamlandı")
+        
+        return self.dart_acquired
 
     def cleanup(self):
         """
         Sistem kapatma
         """
         print("[MissionController] Sistem kapatılıyor...")
+        
+        # Dart recognition sistemini kapat
+        if self.dart_recognition:
+            self.dart_recognition.stop_recognition()
+        
         self.stop_mission()
         self.motor_driver.cleanup()
         print("[MissionController] Sistem güvenli şekilde kapatıldı")
@@ -202,11 +375,11 @@ class MissionController:
 
 # Test kodu
 if __name__ == "__main__":
-    print("=== BARS Mission Controller Test Başlatılıyor ===")
+    print("=== BARLAS Mission Controller Test Başlatılıyor ===")
     
     try:
         # Mission Controller başlat
-        mission = MissionController()
+        mission = MissionController(enable_dart_recognition=True)
         
         print("\n1. Sistem durumu:")
         status = mission.get_system_status()
@@ -235,7 +408,23 @@ if __name__ == "__main__":
             
             time.sleep(0.5)  # Kısa bekleme
         
-        print("\n4. Hareket kontrol testi:")
+        print("\n4. Dart hedefleme sistemi testi:")
+        if mission.enable_dart_recognition:
+            print("   Dart tanıma sistemi mevcut")
+            
+            # Dart hedefleme modunu test et
+            mission.enable_dart_targeting()
+            time.sleep(2)
+            
+            # Otonom dart görevi test et (kısa süre)
+            print("   Otonom dart görevi testi başlatılıyor...")
+            success = mission.autonomous_dart_mission(max_engagement_time=10)
+            print(f"   Dart görevi sonucu: {'Başarılı' if success else 'Başarısız'}")
+        
+        else:
+            print("   Dart tanıma sistemi devre dışı")
+        
+        print("\n5. Hareket kontrol testi:")
         mission.set_vehicle_motion(0.5, 0.0)    # İleri
         time.sleep(1)
         mission.set_vehicle_motion(0.0, 0.3)    # Sağa dön
