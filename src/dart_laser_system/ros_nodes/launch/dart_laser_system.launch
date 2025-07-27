@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- BARLAS Dart Laser System Launch File -->
+
+    <!-- Node parameters -->
+    <arg name="camera_index" default="0" />
+    <arg name="confidence_threshold" default="0.5" />
+    <arg name="lock_time" default="1.5" />
+    <arg name="laser_duration" default="3.0" />
+    <arg name="pan_pin" default="18" />
+    <arg name="tilt_pin" default="19" />
+    <arg name="laser_pin" default="20" />
+
+    <!-- USB Camera Node -->
+    <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen">
+        <param name="video_device" value="/dev/video$(arg camera_index)" />
+        <param name="image_width" value="640" />
+        <param name="image_height" value="480" />
+        <param name="pixel_format" value="yuyv" />
+        <param name="camera_frame_id" value="camera_frame" />
+        <param name="io_method" value="mmap"/>
+        <remap from="/usb_cam/image_raw" to="/barlas/camera/image_raw" />
+    </node>
+
+    <!-- BARLAS Dart Laser Node -->
+    <node name="dart_laser_node" pkg="barlas_dart_laser" type="dart_laser_ros_node.py" output="screen">
+        <param name="camera_index" value="$(arg camera_index)" />
+        <param name="confidence_threshold" value="$(arg confidence_threshold)" />
+        <param name="lock_time" value="$(arg lock_time)" />
+        <param name="laser_duration" value="$(arg laser_duration)" />
+        <param name="pan_pin" value="$(arg pan_pin)" />
+        <param name="tilt_pin" value="$(arg tilt_pin)" />
+        <param name="laser_pin" value="$(arg laser_pin)" />
+    </node>
+
+    <!-- Static Transform Publisher (camera frame) -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="camera_tf_publisher" args="0 0 0.1 0 0 0 base_link camera_frame" />
+
+    <!-- RViz Visualization (optional) -->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find barlas_dart_laser)/rviz/dart_laser_viz.rviz" if="false" />
+
+</launch>

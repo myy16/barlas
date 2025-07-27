@@ -1,0 +1,36 @@
+# BARLAS Arduino Dart Targeting System Requirements
+
+# Ana paketler - Zorunlu
+opencv-python>=4.8.0
+numpy>=1.21.0
+PyYAML>=6.0
+
+# Arduino Serial iletişimi - Zorunlu
+pyserial>=3.5
+
+# YOLO ve ML
+# Otomatik olarak dart_recognize modülünden import edilir
+
+# Geliştirme ve test
+# Tüm paketler pip ile yüklenebilir
+# gpiozero>=1.6.0
+
+# Test ve debugging
+# matplotlib>=3.5.0
+# pillow>=8.0.0
+
+# YOLO model desteği (ONNX)
+# onnxruntime>=1.12.0
+
+# Threading ve async (Python built-in)
+# threading
+# asyncio
+
+# Matematiksel işlemler (zaten numpy ile geliyor)
+# math
+# time
+
+# Sistem etkileşimi (Python built-in)
+# os
+# sys
+# typing

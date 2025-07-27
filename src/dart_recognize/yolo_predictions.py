@@ -17,20 +17,9 @@ class YOLOPredictions:
         
         # Default model ve config paths
         if onnx_model_path is None:
-            # Önce dart_recognize klasöründeki modeli kontrol et
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            local_model_path = os.path.join(current_dir, "Model", "weights", "best.onnx")
-            onnx_model_path = local_model_path  # Doğrudan bu yolu kullan
-                
+            onnx_model_path = r"D:\yolo\yolo_object_detection\Model\weights\best.onnx"
         if data_yaml_path is None:
-            # data.yaml dosyasını dart_recognize klasöründe ara
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            local_yaml_path = os.path.join(current_dir, "data.yaml")
-            
-            if os.path.exists(local_yaml_path):
-                data_yaml_path = local_yaml_path
-            else:
-                data_yaml_path = 'data.yaml'
+            data_yaml_path = 'data.yaml'
         
         # YAML config dosyasını yükle
         try:
@@ -39,7 +28,6 @@ class YOLOPredictions:
             
             self.labels = data_yaml['names']
             self.nc = data_yaml['nc']
-            print(f"YAML config yüklendi: {data_yaml_path}")
         except FileNotFoundError:
             # Default labels if data.yaml not found
             self.labels = {0: 'dart'}
@@ -48,26 +36,7 @@ class YOLOPredictions:
         
         # YOLO modelini yükle
         if not os.path.exists(onnx_model_path):
-            print(f"Model dosyası bulunamadı: {onnx_model_path}")
-            print("Mevcut dosyalar kontrol ediliyor...")
-            
-            # Alternatif model yollarını kontrol et
-            possible_paths = [
-                os.path.join(os.path.dirname(__file__), "Model", "weights", "best.onnx"),
-                os.path.join(os.path.dirname(__file__), "..", "Model", "weights", "best.onnx"),
-                r"D:\yolo\yolo_object_detection\Model\weights\best.onnx",
-                "best.onnx"
-            ]
-            
-            for path in possible_paths:
-                if os.path.exists(path):
-                    onnx_model_path = path
-                    print(f"Model bulundu: {onnx_model_path}")
-                    break
-            else:
-                raise FileNotFoundError(f"YOLO model dosyası hiçbir yerde bulunamadı. Kontrol edilen yollar: {possible_paths}")
-            
-        print(f"YOLO modeli yükleniyor: {onnx_model_path}")
+            raise FileNotFoundError(f"YOLO model file not found: {onnx_model_path}")
             
         self.yolo = cv2.dnn.readNetFromONNX(onnx_model_path)
         self.yolo.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
