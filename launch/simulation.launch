@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- MAVROS bağlantısı -->
+    <include file="$(find mavros)/launch/px4.launch">
+        <arg name="fcu_url" value="udp://:14540@127.0.0.1:14557"/>
+        <arg name="gcs_url" value=""/>
+        <arg name="tgt_system" value="1"/>
+        <arg name="tgt_component" value="1"/>
+    </include>
+
+    <!-- Gazebo dünyası -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name" value="$(find barlas_simulation)/worlds/barlas.world"/>
+        <arg name="paused" value="false"/>
+        <arg name="use_sim_time" value="true"/>
+        <arg name="gui" value="true"/>
+        <arg name="headless" value="false"/>
+        <arg name="debug" value="false"/>
+    </include>
+
+    <!-- Robot modeli -->
+    <param name="robot_description" command="$(find xacro)/xacro '$(find barlas_description)/urdf/barlas.urdf.xacro'"/>
+
+    <!-- Robot state publisher -->
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+        <param name="publish_frequency" type="double" value="50.0"/>
+    </node>
+
+    <!-- Gazebo model spawner -->
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-param robot_description -urdf -model barlas"/>
+
+    <!-- BARLAS kontrol node'u -->
+    <node pkg="barlas_control" type="px4_control_node.py" name="px4_control_node" output="screen">
+        <param name="max_velocity" value="1.0"/>
+        <param name="max_turn_rate" value="1.0"/>
+    </node>
+</launch>

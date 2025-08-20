@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Sensör arayüz node'u başlat -->
+    <node name="barlas_sensor_interface" pkg="barlas_sensor_interface" type="sensor_interface_node.py" output="screen">
+        <!-- Seri port parametreleri -->
+        <param name="serial_port" value="/dev/ttyACM0"/>
+        <param name="baud_rate" value="115200"/>
+    </node>
+
+    <!-- RViz ile sensör verilerini görselleştir -->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find barlas_sensor_interface)/rviz/sensors.rviz"/>
+
+    <!-- Statik dönüşümleri yayınla -->
+    <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.2 0 0.1 0 0 0 base_link base_laser 100" />
+    <node pkg="tf" type="static_transform_publisher" name="base_to_imu" args="0 0 0.15 0 0 0 base_link base_imu 100" />
+</launch>

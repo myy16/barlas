@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+    <name>barlas_sensor_interface</name>
+    <version>0.1.0</version>
+    <description>
+    BARLAS robot için sensör arayüz paketi.
+    Raspberry Pi'den gelen sensör verilerini ROS'a çevirir.
+    </description>
+
+    <maintainer email="myy16@gmail.com">Barlas Team</maintainer>
+    <license>MIT</license>
+
+    <buildtool_depend>catkin</buildtool_depend>
+
+    <depend>rospy</depend>
+    <depend>std_msgs</depend>
+    <depend>sensor_msgs</depend>
+    <depend>diagnostic_msgs</depend>
+
+    <exec_depend>python3-serial</exec_depend>
+    <exec_depend>python3-numpy</exec_depend>
+</package>

@@ -1,0 +1,22 @@
+# requirements.txt
+
+# Seri port iletişimi
+pyserial>=3.5
+
+# Bilimsel hesaplama
+numpy>=1.19.5
+
+# GPIO kontrol (Raspberry Pi)
+RPi.GPIO>=0.7.0
+
+# I2C iletişimi
+smbus2>=0.4.1
+
+# YAML konfigürasyon
+pyyaml>=5.4.1
+
+# JSON işleme
+ujson>=4.0.2
+
+# Loglama
+loguru>=0.5.3
