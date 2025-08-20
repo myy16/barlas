@@ -52,7 +52,7 @@ make px4_sitl gazebo
 sudo apt install gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
 
 # QGroundControl indirme ve kurulum
-wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage
+wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage  (manüel internetten indir böyle çalışmıyo)
 chmod +x ./QGroundControl.AppImage
 ```
 
