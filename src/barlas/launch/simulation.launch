@@ -19,19 +19,14 @@
     </include>
 
     <!-- Robot modeli -->
-    <param name="robot_description" command="$(find xacro)/xacro '$(find barlas_description)/urdf/barlas.urdf.xacro'"/>
-
+    <param name="robot_description" command="$(find xacro)/xacro '$(find barlas)/urdf/barlas.urdf.xacro'"/>
+    
     <!-- Robot state publisher -->
     <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
         <param name="publish_frequency" type="double" value="50.0"/>
     </node>
 
     <!-- Gazebo model spawner -->
-    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-param robot_description -urdf -model barlas"/>
-
-    <!-- BARLAS kontrol node'u -->
-    <node pkg="barlas_control" type="px4_control_node.py" name="px4_control_node" output="screen">
-        <param name="max_velocity" value="1.0"/>
-        <param name="max_turn_rate" value="1.0"/>
-    </node>
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
+        args="-param robot_description -urdf -model barlas"/>
 </launch>

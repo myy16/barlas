@@ -1,19 +1,38 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>barlas</name>
-  <version>0.1.0</version>
-  <description>BARLAS robot control package</description>
-  <maintainer email="myy16@gmail.com">Barlas Team</maintainer>
+  <version>1.0.0</version>
+  <description>BARLAS Hibrit İnsansız Kara Aracı Sistemi</description>
+
+  <maintainer email="barlas@teknofest.com">BARLAS Team</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   
-  <depend>roscpp</depend>
-  <depend>rospy</depend>
-  <depend>std_msgs</depend>
-  <depend>gazebo_ros</depend>
-  <depend>mavros</depend>
-  <depend>mavros_msgs</depend>
-  <depend>geometry_msgs</depend>
-  <depend>sensor_msgs</depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>mavros_msgs</build_depend>
+  <build_depend>cv_bridge</build_depend>
+  <build_depend>image_transport</build_depend>
+  
+  <build_export_depend>rospy</build_export_depend>
+  <build_export_depend>std_msgs</build_export_depend>
+  <build_export_depend>sensor_msgs</build_export_depend>
+  <build_export_depend>geometry_msgs</build_export_depend>
+  <build_export_depend>mavros_msgs</build_export_depend>
+  <build_export_depend>cv_bridge</build_export_depend>
+  <build_export_depend>image_transport</build_export_depend>
+  
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>mavros_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+
+  <export>
+  </export>
 </package>

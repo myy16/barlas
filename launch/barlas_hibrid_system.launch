@@ -1,0 +1,77 @@
+# BARLAS Hibrit Sistem Launch File
+# WSL2 ROS Noetic + Mission Planner Integration
+
+<launch>
+  <!-- ========== BARLAS ROS Bridge ========== -->
+  <node name="barlas_ros_bridge" pkg="barlas" type="barlas_ros_bridge.py" output="screen">
+    <param name="mavros_namespace" value="/mavros" />
+    <param name="dart_laser_enabled" value="true" />
+    <param name="obstacle_avoidance_enabled" value="true" />
+  </node>
+  
+  <!-- ========== BARLAS Hibrid Controller ========== -->
+  <node name="barlas_hibrid_controller" pkg="barlas" type="barlas_hibrid_controller.py" output="screen">
+    <param name="control_frequency" value="10.0" />
+    <param name="emergency_stop_timeout" value="5.0" />
+  </node>
+  
+  <!-- ========== MAVROS Connection ========== -->
+  <!-- ArduPilot SITL bağlantısı - WSL2'deki sim_vehicle.py'dan gelen UDP -->
+  <include file="$(find mavros)/launch/apm.launch">
+    <arg name="fcu_url" value="udp://:14550@127.0.0.1:14551" />
+    <arg name="gcs_url" value="" />
+    <arg name="target_system_id" value="1" />
+    <arg name="target_component_id" value="1" />
+    <arg name="log_output" value="screen" />
+  </include>
+  
+  <!-- ========== Dart Laser System ========== -->
+  <!-- Mevcut dart laser sisteminizi ROS'a entegre eder -->
+  <include file="$(find barlas_dart_laser)/launch/dart_laser_system.launch" />
+  
+  <!-- ========== Sensor Interface ========== -->
+  <!-- Raspberry Pi sensörlerinden ROS topic'lere çevirici -->
+  <node name="barlas_sensor_interface" pkg="barlas_sensor_interface" type="sensor_interface_node.py" output="screen">
+    <param name="serial_port" value="/dev/ttyUSB0" />
+    <param name="baud_rate" value="115200" />
+    <param name="publish_rate" value="10.0" />
+  </node>
+  
+  <!-- ========== Camera Node ========== -->
+  <!-- USB kamera için -->
+  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen">
+    <param name="video_device" value="/dev/video0" />
+    <param name="image_width" value="640" />
+    <param name="image_height" value="480" />
+    <param name="pixel_format" value="yuyv" />
+    <param name="camera_frame_id" value="usb_cam" />
+    <param name="io_method" value="mmap"/>
+    <remap from="image" to="/barlas/camera/image_raw" />
+  </node>
+  
+  <!-- ========== Obstacle Avoidance ========== -->
+  <node name="barlas_obstacle_avoidance" pkg="barlas" type="obstacle_avoidance.py" output="screen">
+    <param name="safety_distance" value="1.5" />
+    <param name="max_linear_speed" value="0.5" />
+    <param name="max_angular_speed" value="1.0" />
+  </node>
+  
+  <!-- ========== Static Transforms ========== -->
+  <!-- Pan-tilt kamera transform'u -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="camera_link"
+        args="0.2 0 0.3 0 0 0 base_link camera_link" />
+        
+  <!-- Lazer pointer transform'u -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="laser_link"
+        args="0.22 0 0.31 0 0 0 base_link laser_link" />
+  
+  <!-- ========== Monitoring and Debug ========== -->
+  <!-- RQT ile sistem monitörü -->
+  <node name="rqt_multiplot" pkg="rqt_multiplot" type="rqt_multiplot" 
+        args="--multiplot-config $(find barlas)/config/barlas_monitoring.xml" />
+        
+  <!-- RViz visualization -->
+  <node name="rviz" pkg="rviz" type="rviz" 
+        args="-d $(find barlas)/rviz/barlas_hibrid.rviz" />
+
+</launch>

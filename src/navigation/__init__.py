@@ -1,3 +1,0 @@
-"""
-BARLAS Robot navigasyon paketi
-"""
