@@ -24,7 +24,7 @@ except ImportError as e:
 
 # Arduino Controller import et
 try:
-    from arduino_controller import ArduinoPanTiltController
+    from .arduino_controller_fixed import ArduinoPanTiltController
     ARDUINO_AVAILABLE = True
     print("✅ Arduino Controller modülü yüklendi!")
 except ImportError as e:
