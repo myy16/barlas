@@ -1,22 +1,41 @@
-# BARLAS Hibrit Sistem Launch File
-# WSL2 ROS Noetic + Mission Planner Integration
+<?xml version="1.0"?>
+<!-- BARLAS Hibrit Sistem Launch File - TEKNOFEST 2025 EDITION -->
+<!-- WSL2 ROS Noetic + Mission Planner + Competition Manager Integration -->
 
 <launch>
-  <!-- ========== BARLAS ROS Bridge ========== -->
-  <node name="barlas_ros_bridge" pkg="barlas" type="barlas_ros_bridge.py" output="screen">
-    <param name="mavros_namespace" value="/mavros" />
-    <param name="dart_laser_enabled" value="true" />
-    <param name="obstacle_avoidance_enabled" value="true" />
+  <!-- ========== TEKNOFEST COMPETITION MANAGER ========== -->
+  <node name="barlas_competition_manager" pkg="barlas" type="competition_manager.py" output="screen">
+    <param name="max_competition_duration" value="900" />
+    <!-- 15 dakika -->
+    <param name="safety_check_frequency" value="2.0" />
+    <param name="auto_start_competition" value="false" />
   </node>
-  
-  <!-- ========== BARLAS Hibrid Controller ========== -->
+
+  <!-- ========== BARLAS HIBRID CONTROLLER (Teknofest Edition) ========== -->
   <node name="barlas_hibrid_controller" pkg="barlas" type="barlas_hibrid_controller.py" output="screen">
     <param name="control_frequency" value="10.0" />
     <param name="emergency_stop_timeout" value="5.0" />
+    <param name="competition_mode" value="true" />
+    <param name="parkour_enabled" value="true" />
   </node>
-  
-  <!-- ========== MAVROS Connection ========== -->
-  <!-- ArduPilot SITL bağlantısı - WSL2'deki sim_vehicle.py'dan gelen UDP -->
+
+  <!-- ========== PARKOUR TASK MANAGER ========== -->
+  <node name="parkour_task_manager" pkg="barlas" type="parkour_task_manager.py" output="screen">
+    <param name="task_timeout" value="120.0" />
+    <!-- 2 dakika görev timeout -->
+    <param name="safety_monitoring" value="true" />
+  </node>
+
+  <!-- ========== TRAFFIC SIGN RECOGNITION ========== -->
+  <node name="traffic_sign_recognition" pkg="barlas" type="traffic_sign_recognition.py" output="screen">
+    <param name="confidence_threshold" value="0.7" />
+    <param name="detection_frequency" value="5.0" />
+    <param name="model_path" value="$(find barlas)/models/traffic_signs_teknofest.h5" />
+    <remap from="camera/image_raw" to="/barlas/camera/image_raw" />
+    <remap from="traffic_signs/detected" to="/barlas/traffic_sign/detected" />
+  </node>
+
+  <!-- ========== MAVROS Connection (ArduPilot SITL) ========== -->
   <include file="$(find mavros)/launch/apm.launch">
     <arg name="fcu_url" value="udp://:14550@127.0.0.1:14551" />
     <arg name="gcs_url" value="" />
@@ -24,54 +43,147 @@
     <arg name="target_component_id" value="1" />
     <arg name="log_output" value="screen" />
   </include>
-  
-  <!-- ========== Dart Laser System ========== -->
-  <!-- Mevcut dart laser sisteminizi ROS'a entegre eder -->
-  <include file="$(find barlas_dart_laser)/launch/dart_laser_system.launch" />
-  
-  <!-- ========== Sensor Interface ========== -->
-  <!-- Raspberry Pi sensörlerinden ROS topic'lere çevirici -->
-  <node name="barlas_sensor_interface" pkg="barlas_sensor_interface" type="sensor_interface_node.py" output="screen">
-    <param name="serial_port" value="/dev/ttyUSB0" />
-    <param name="baud_rate" value="115200" />
-    <param name="publish_rate" value="10.0" />
+
+  <!-- ========== BARLAS ROS BRIDGE (Updated) ========== -->
+  <node name="barlas_ros_bridge" pkg="barlas" type="barlas_ros_bridge.py" output="screen">
+    <param name="mavros_namespace" value="/mavros" />
+    <param name="dart_laser_enabled" value="true" />
+    <param name="obstacle_avoidance_enabled" value="true" />
+    <param name="competition_mode" value="true" />
+    <param name="traffic_sign_integration" value="true" />
   </node>
-  
-  <!-- ========== Camera Node ========== -->
-  <!-- USB kamera için -->
-  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen">
+
+  <!-- ========== DART LASER SYSTEM (Competition Ready) ========== -->
+  <include file="$(find barlas_dart_laser)/launch/dart_laser_system.launch">
+    <arg name="competition_mode" value="true" />
+    <arg name="auto_targeting" value="true" />
+    <arg name="confidence_threshold" value="0.6" />
+  </include>
+
+  <!-- ========== SENSOR INTERFACE (Teknofest Configuration) ========== -->
+  <include file="$(find barlas_sensor_interface)/launch/sensors.launch">
+    <arg name="competition_mode" value="true" />
+    <arg name="high_frequency_mode" value="true" />
+  </include>
+
+  <!-- ========== OBSTACLE AVOIDANCE (Enhanced) ========== -->
+  <node name="barlas_obstacle_avoidance" pkg="barlas" type="obstacle_avoidance.py" output="screen">
+    <param name="safety_distance" value="1.5" />
+    <param name="max_linear_speed" value="0.8" />
+    <!-- Teknofest için artırıldı -->
+    <param name="max_angular_speed" value="1.2" />
+    <param name="competition_mode" value="true" />
+    <param name="emergency_stop_distance" value="0.5" />
+  </node>
+
+  <!-- ========== CAMERA SYSTEM ========== -->
+  <!-- Ana kamera (tabela algılama + dart detection) -->
+  <node name="usb_cam_main" pkg="usb_cam" type="usb_cam_node" output="screen">
     <param name="video_device" value="/dev/video0" />
+    <param name="image_width" value="1280" />
+    <!-- Yüksek çözünürlük -->
+    <param name="image_height" value="720" />
+    <param name="pixel_format" value="yuyv" />
+    <param name="camera_frame_id" value="main_camera" />
+    <param name="framerate" value="30" />
+    <remap from="image" to="/barlas/camera/image_raw" />
+  </node>
+
+  <!-- Pan-tilt kamera (dart hedefleme) -->
+  <node name="usb_cam_pantilt" pkg="usb_cam" type="usb_cam_node" output="screen">
+    <param name="video_device" value="/dev/video1" />
     <param name="image_width" value="640" />
     <param name="image_height" value="480" />
     <param name="pixel_format" value="yuyv" />
-    <param name="camera_frame_id" value="usb_cam" />
-    <param name="io_method" value="mmap"/>
-    <remap from="image" to="/barlas/camera/image_raw" />
+    <param name="camera_frame_id" value="pantilt_camera" />
+    <param name="framerate" value="30" />
+    <remap from="image" to="/barlas/dart_camera/image_raw" />
   </node>
-  
-  <!-- ========== Obstacle Avoidance ========== -->
-  <node name="barlas_obstacle_avoidance" pkg="barlas" type="obstacle_avoidance.py" output="screen">
-    <param name="safety_distance" value="1.5" />
-    <param name="max_linear_speed" value="0.5" />
-    <param name="max_angular_speed" value="1.0" />
+
+  <!-- ========== TRANSFORM PUBLISHERS (Teknofest Robot) ========== -->
+  <!-- Robot base transforms -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="base_footprint_tf" args="0 0 0 0 0 0 map base_footprint" />
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="base_link_tf" args="0 0 0.1 0 0 0 base_footprint base_link" />
+
+  <!-- Sensor transforms -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="main_camera_tf" args="0.3 0 0.4 0 0 0 base_link main_camera" />
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="pantilt_camera_tf" args="0.25 0 0.35 0 0 0 base_link pantilt_camera" />
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="laser_pointer_tf" args="0.27 0 0.37 0 0 0 base_link laser_pointer" />
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="imu_tf" args="0.0 0.0 0.15 0 0 0 base_link imu_frame" />
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="lidar_tf" args="0.20 0.0 0.25 0 0 0 base_link laser_frame" />
+
+  <!-- ========== COMPETITION SCORING & MONITORING ========== -->
+  <!-- Teknofest puanlama sistemi -->
+  <node name="competition_scorer" pkg="barlas" type="competition_scorer.py" output="screen">
+    <param name="scoring_enabled" value="true" />
+    <param name="log_all_events" value="true" />
+    <param name="report_file" value="/tmp/barlas_competition_report.json" />
   </node>
-  
-  <!-- ========== Static Transforms ========== -->
-  <!-- Pan-tilt kamera transform'u -->
-  <node pkg="tf2_ros" type="static_transform_publisher" name="camera_link"
-        args="0.2 0 0.3 0 0 0 base_link camera_link" />
-        
-  <!-- Lazer pointer transform'u -->
-  <node pkg="tf2_ros" type="static_transform_publisher" name="laser_link"
-        args="0.22 0 0.31 0 0 0 base_link laser_link" />
-  
-  <!-- ========== Monitoring and Debug ========== -->
-  <!-- RQT ile sistem monitörü -->
-  <node name="rqt_multiplot" pkg="rqt_multiplot" type="rqt_multiplot" 
-        args="--multiplot-config $(find barlas)/config/barlas_monitoring.xml" />
-        
-  <!-- RViz visualization -->
-  <node name="rviz" pkg="rviz" type="rviz" 
-        args="-d $(find barlas)/rviz/barlas_hibrid.rviz" />
+
+  <!-- Real-time performance monitor -->
+  <node name="performance_monitor" pkg="barlas" type="performance_monitor.py" output="screen">
+    <param name="monitor_frequency" value="5.0" />
+    <param name="alert_thresholds_file" value="$(find barlas)/config/teknofest_alerts.yaml" />
+  </node>
+
+  <!-- ========== VISUALIZATION & DEBUGGING ========== -->
+  <!-- Competition-specific RViz configuration -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find barlas)/rviz/teknofest_competition.rviz" />
+
+  <!-- RQT dashboard for competition monitoring -->
+  <node name="rqt_dashboard" pkg="rqt_gui" type="rqt_gui" args="--perspective-file $(find barlas)/config/teknofest_dashboard.perspective" />
+
+  <!-- ========== DATA LOGGING (Teknofest Requirements) ========== -->
+  <!-- Comprehensive competition data logging -->
+  <node name="rosbag_record" pkg="rosbag" type="record" args="/barlas/competition/status /barlas/competition/score
+              /barlas/traffic_sign/detected /barlas/dart_laser/status  
+              /barlas/sensors/scan /barlas/sensors/imu /barlas/sensors/gps
+              /barlas/camera/image_raw /barlas/dart_camera/image_raw
+              /barlas/control/cmd_vel /barlas/parkour/status
+              /mavros/state /mavros/rc/override
+              -o $(find barlas)/logs/teknofest_competition_$(env USER)_$(arg competition_date)">
+    <param name="compression" value="lz4" />
+  </node>
+
+  <!-- ========== EMERGENCY SYSTEMS ========== -->
+  <!-- Fail-safe emergency stop monitor -->
+  <node name="emergency_monitor" pkg="barlas" type="emergency_monitor.py" output="screen">
+    <param name="battery_threshold" value="20.0" />
+    <param name="tilt_threshold" value="45.0" />
+    <param name="proximity_threshold" value="0.3" />
+    <param name="auto_recovery" value="true" />
+  </node>
+
+  <!-- ========== PARAMETER OVERRIDES FOR COMPETITION ========== -->
+  <!-- Teknofest specific parameter loading -->
+  <rosparam file="$(find barlas)/config/teknofest_competition_params.yaml" command="load" />
+
+</launch>
+
+<!-- ========== Obstacle Avoidance ========== -->
+<node name="barlas_obstacle_avoidance" pkg="barlas" type="obstacle_avoidance.py" output="screen">
+  <param name="safety_distance" value="1.5" />
+  <param name="max_linear_speed" value="0.5" />
+  <param name="max_angular_speed" value="1.0" />
+</node>
+
+<!-- ========== Static Transforms ========== -->
+<!-- Pan-tilt kamera transform'u -->
+<node pkg="tf2_ros" type="static_transform_publisher" name="camera_link" args="0.2 0 0.3 0 0 0 base_link camera_link" />
+
+<!-- Lazer pointer transform'u -->
+<node pkg="tf2_ros" type="static_transform_publisher" name="laser_link" args="0.22 0 0.31 0 0 0 base_link laser_link" />
+
+<!-- ========== Monitoring and Debug ========== -->
+<!-- RQT ile sistem monitörü -->
+<node name="rqt_multiplot" pkg="rqt_multiplot" type="rqt_multiplot" args="--multiplot-config $(find barlas)/config/barlas_monitoring.xml" />
+
+<!-- RViz visualization -->
+<node name="rviz" pkg="rviz" type="rviz" args="-d $(find barlas)/rviz/barlas_hibrid.rviz" />
 
 </launch>

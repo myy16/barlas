@@ -1,0 +1,182 @@
+# TEKNOFEST 2025 İNSANSIZ KARA ARACI YARIŞMASI
+# BARLAS Competition Parameters
+
+# === GENEL YARISMA PARAMETRELERI ===
+competition:
+  max_duration: 900  # 15 dakika
+  start_delay: 10    # Başlama gecikmesi (saniye)
+  auto_emergency_stop: true
+  scoring_enabled: true
+
+# === PARKUR GÖREV PARAMETRELERİ ===
+parkour_tasks:
+  dik_eğim:
+    max_speed: 0.3
+    timeout: 60
+    angle_threshold: 45.0
+    points: 15
+    
+  yan_eğim:  
+    max_speed: 0.4
+    timeout: 45
+    tilt_threshold: 20.0
+    points: 10
+    
+  sığ_su:
+    max_speed: 0.25
+    timeout: 90
+    depth_threshold: 0.4
+    points: 15
+    
+  çakıllı_yol:
+    max_speed: 0.4
+    timeout: 30
+    vibration_threshold: 2.0
+    points: 10
+    
+  trafik_konileri:
+    max_speed: 0.35
+    timeout: 120
+    cone_distance: 3.0
+    points: 20
+    
+  hızlanma:
+    max_speed: 1.0
+    timeout: 20
+    acceleration: 0.5
+    points: 10
+
+# === DART HEDEFLEME PARAMETRELERİ ===
+dart_targeting:
+  confidence_threshold: 0.6
+  max_attempts: 3
+  timeout_per_attempt: 60
+  points_per_hit: 10
+  bonus_center_hit: 5
+
+# === TABELA ALGILAMA PARAMETRELERİ ===
+traffic_signs:
+  confidence_threshold: 0.7
+  detection_frequency: 5.0
+  stable_frames: 3
+  points_per_detection: 3
+
+# === GÜVENLİK PARAMETRELERİ ===
+safety:
+  emergency_stop:
+    battery_threshold: 15.0      # %15 altında acil durum
+    tilt_threshold: 50.0         # 50° üzerinde devrilme riski
+    proximity_threshold: 0.3     # 30cm yakın engel
+    temperature_threshold: 60.0   # 60°C üzerinde aşırı ısınma
+    
+  max_violations: 3
+  violation_timeout: 5.0
+
+# === SENSÖR KONFIGÜRASYONU ===
+sensors:
+  imu:
+    frequency: 50.0
+    calibration_samples: 100
+    
+  lidar:
+    frequency: 10.0
+    range_min: 0.1
+    range_max: 10.0
+    
+  ultrasonic:
+    frequency: 20.0
+    max_range: 6.0
+    
+  gps:
+    frequency: 10.0
+    accuracy_threshold: 2.0
+    
+  camera:
+    main_camera:
+      width: 1280
+      height: 720
+      fps: 30
+    dart_camera:
+      width: 640 
+      height: 480
+      fps: 30
+
+# === PID KONTROL PARAMETRELERİ ===
+pid_controllers:
+  default:
+    kp: 0.6
+    ki: 0.08
+    kd: 0.03
+    
+  dik_eğim:
+    kp: 1.0
+    ki: 0.12
+    kd: 0.06
+    
+  yan_eğim:
+    kp: 0.8
+    ki: 0.10
+    kd: 0.05
+    
+  sığ_su:
+    kp: 0.9
+    ki: 0.08
+    kd: 0.04
+    
+  trafik_konileri:
+    kp: 0.9
+    ki: 0.04
+    kd: 0.05
+
+# === PUANLAMA SİSTEMİ ===
+scoring:
+  base_points:
+    otonom_sürüş: 20
+    tabela_algılama: 15
+    dart_atış: 30
+    
+  time_bonus:
+    enabled: true
+    max_bonus: 10
+    time_factor: 0.1  # Her 10 saniye erken bitirme için 1 puan
+    
+  penalty:
+    collision: -5
+    timeout: -2
+    manual_intervention: -3
+
+# === MAVROS KONFIGÜRASYONU ===
+mavros:
+  connection:
+    fcu_url: "udp://:14550@127.0.0.1:14551"
+    target_system: 1
+    target_component: 1
+    
+  rc_override:
+    throttle_channel: 3
+    steering_channel: 1
+    mode_channel: 5
+    
+  failsafe:
+    enabled: true
+    timeout: 5.0
+
+# === LOG VE KAYIT PARAMETRELERİ ===
+logging:
+  enabled: true
+  log_level: "INFO"
+  log_directory: "/tmp/barlas_logs"
+  rosbag_topics:
+    - "/barlas/competition/status"
+    - "/barlas/competition/score"
+    - "/barlas/sensors/scan"
+    - "/barlas/sensors/imu"
+    - "/barlas/camera/image_raw"
+    - "/barlas/control/cmd_vel"
+    
+# === GÖRSELLEŞTIRME PARAMETRELERİ ===
+visualization:
+  rviz_enabled: true
+  rqt_enabled: true
+  competition_dashboard: true
+  real_time_plotting: true

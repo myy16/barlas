@@ -1,143 +1,102 @@
+#!/usr/bin/env python3
 """
-LIDAR sensör test modülü
+BARLAS LiDAR Test
+Engel algılama ve haritalama testi
+Teknofest İnsansız Kara Aracı Yarışması
 """
+
 import time
 import numpy as np
-import matplotlib.pyplot as plt
+import sys
+sys.path.append('/opt/ros/noetic/lib/python3/dist-packages')
+
 from lidar_manager import LidarManager
 
-def test_lidar_connection():
-    """LIDAR bağlantısını test et"""
-    print("🔍 LIDAR bağlantı testi başlatılıyor...")
+def test_lidar_sensor():
+    """LiDAR sensor test fonksiyonu"""
+    print("📡 BARLAS LiDAR Test Başlıyor...")
     
-    # Windows için COM portu, Linux için /dev/ttyUSB0
-    port = "COM3" if os.name == 'nt' else "/dev/ttyUSB0"
-    
-    # LIDAR yöneticisini başlat
-    lidar = LidarManager(port=port)
-    
-    if not lidar.connect():
-        print("❌ LIDAR bağlantısı başarısız!")
-        return
-        
     try:
-        # Taramayı başlat
-        lidar.start_scanning()
+        # LiDAR initialize
+        lidar = LidarManager()
         
-        # Birkaç tarama al ve göster
-        for i in range(5):
-            scan = lidar.get_latest_scan()
-            if scan:
-                print(f"\nTarama #{i+1}:")
-                print(f"Nokta sayısı: {len(scan['angles'])}")
-                print(f"Min mesafe: {min(scan['distances']):.2f}m")
-                print(f"Max mesafe: {max(scan['distances']):.2f}m")
-            time.sleep(1.0)
+        print("\n🔄 LiDAR Tarama Testi:")
+        
+        for i in range(20):  # 20 saniye test
+            # Tam tarama al
+            scan_data = lidar.get_scan()
             
-    except KeyboardInterrupt:
-        print("\n🛑 Test durduruluyor...")
-    finally:
-        lidar.cleanup()
-        print("✅ Test tamamlandı")
-
-def visualize_lidar_scan():
-    """LIDAR taramasını görselleştir"""
-    print("📊 LIDAR görselleştirme başlatılıyor...")
-    
-    port = "COM3" if os.name == 'nt' else "/dev/ttyUSB0"
-    lidar = LidarManager(port=port)
-    
-    if not lidar.connect():
-        print("❌ LIDAR bağlantısı başarısız!")
-        return
-        
-    try:
-        # Taramayı başlat
-        lidar.start_scanning()
-        
-        # Matplotlib figure hazırla
-        plt.ion()  # Interaktif mod
-        fig = plt.figure(figsize=(8, 8))
-        ax = fig.add_subplot(111, projection='polar')
-        
-        while True:
-            # Tarama verisini al
-            scan = lidar.get_latest_scan()
-            if scan:
-                # Polar plot temizle
-                ax.clear()
-                
-                # Radyal veriyi çiz
-                angles_rad = np.deg2rad(scan['angles'])
-                ax.scatter(angles_rad, scan['distances'], 
-                         c=scan['intensities'], cmap='viridis', 
-                         s=5, alpha=0.5)
-                
-                # Grafik ayarları
-                ax.set_title('YDLIDAR X4 Taraması')
-                ax.set_theta_zero_location('N')  # 0 derece yukarıda
-                ax.set_theta_direction(-1)       # Saat yönünde
-                ax.grid(True)
-                
-                # Ekranı güncelle
-                plt.draw()
-                plt.pause(0.1)
-                
-    except KeyboardInterrupt:
-        print("\n🛑 Görselleştirme durduruluyor...")
-    finally:
-        lidar.cleanup()
-        plt.ioff()
-        plt.close()
-        print("✅ Görselleştirme tamamlandı")
-
-def test_obstacle_detection():
-    """Engel tespitini test et"""
-    print("🎯 Engel tespit testi başlatılıyor...")
-    
-    port = "COM3" if os.name == 'nt' else "/dev/ttyUSB0"
-    lidar = LidarManager(port=port)
-    
-    if not lidar.connect():
-        print("❌ LIDAR bağlantısı başarısız!")
-        return
-        
-    try:
-        # Taramayı başlat
-        lidar.start_scanning()
-        
-        while True:
-            # Yakın engelleri tespit et (0.1m - 1.0m arası)
-            obstacles = lidar.get_obstacles_in_range(0.1, 1.0)
+            if scan_data is None:
+                print(f"Test {i+1}: ❌ Veri alınamadı")
+                continue
             
-            if obstacles:
-                print("\n⚠️ Engeller tespit edildi!")
-                for angle, distance in obstacles:
-                    print(f"  {angle:.1f}° yönünde {distance:.2f}m mesafede")
+            # Engel analizi
+            front_distances = []
+            left_distances = []
+            right_distances = []
+            
+            angles = scan_data['angles']
+            ranges = scan_data['ranges']
+            
+            for j, angle in enumerate(angles):
+                distance = ranges[j]
+                
+                # Ön bölge (-45° to +45°)
+                if -45 <= np.degrees(angle) <= 45:
+                    front_distances.append(distance)
+                # Sol bölge (45° to 135°)  
+                elif 45 <= np.degrees(angle) <= 135:
+                    left_distances.append(distance)
+                # Sağ bölge (-135° to -45°)
+                elif -135 <= np.degrees(angle) <= -45:
+                    right_distances.append(distance)
+            
+            # En yakın engeller
+            min_front = min(front_distances) if front_distances else float('inf')
+            min_left = min(left_distances) if left_distances else float('inf')
+            min_right = min(right_distances) if right_distances else float('inf')
+            
+            # Durum analizi
+            front_status = "🔴 ENGELLİ" if min_front < 1.5 else "🟢 AÇIK"
+            left_status = "🔴 ENGELLİ" if min_left < 1.0 else "🟢 AÇIK"
+            right_status = "🔴 ENGELLİ" if min_right < 1.0 else "🟢 AÇIK"
+            
+            print(f"Test {i+1:2d} | "
+                  f"Ön: {min_front:5.1f}m {front_status} | "
+                  f"Sol: {min_left:5.1f}m {left_status} | "
+                  f"Sağ: {min_right:5.1f}m {right_status}")
+            
+            time.sleep(1)
+        
+        print("\n🎯 Parkur Engel Testi:")
+        print("Aracı engellerin yanına götürün...")
+        
+        obstacle_detected = False
+        for i in range(30):
+            scan_data = lidar.get_scan()
+            if scan_data is None:
+                continue
+                
+            # Kritik mesafe kontrolü
+            critical_distances = [r for r in scan_data['ranges'] if 0.1 < r < 0.5]
+            
+            if len(critical_distances) > 10:  # Çok yakın engel
+                if not obstacle_detected:
+                    print("🚨 KRİTİK MESAFE! Engel çok yakın!")
+                    obstacle_detected = True
             else:
-                print("\n✅ Yakın çevrede engel yok")
-                
+                if obstacle_detected:
+                    print("✅ Güvenli mesafe")
+                    obstacle_detected = False
+            
             time.sleep(0.5)
             
-    except KeyboardInterrupt:
-        print("\n🛑 Test durduruluyor...")
-    finally:
-        lidar.cleanup()
-        print("✅ Test tamamlandı")
+    except Exception as e:
+        print(f"❌ LiDAR hatası: {e}")
+        return False
+    
+    print("✅ LiDAR testi tamamlandı!")
+    return True
 
 if __name__ == "__main__":
-    print("YDLIDAR X4 Test Menüsü")
-    print("1. Bağlantı Testi")
-    print("2. Görselleştirme")
-    print("3. Engel Tespiti")
-    
-    choice = input("Test seçin (1/2/3): ")
-    
-    if choice == "1":
-        test_lidar_connection()
-    elif choice == "2":
-        visualize_lidar_scan()
-    elif choice == "3":
-        test_obstacle_detection()
-    else:
-        print("❌ Geçersiz seçim")
+    test_lidar_sensor()

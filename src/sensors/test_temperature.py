@@ -1,89 +1,88 @@
+#!/usr/bin/env python3
 """
-Sıcaklık sensörü test modülü
+BARLAS Temperature Sensor Test
+BME280 sıcaklık/nem/basınç ölçüm testi
+Teknofest İnsansız Kara Aracı Yarışması - Su sızıntısı ve şasi sıcaklık takibi
 """
+
 import time
+import sys
+sys.path.append('/opt/ros/noetic/lib/python3/dist-packages')
+
 from temperature_sensor import TemperatureSensor
 
 def test_temperature_sensor():
-    """Sıcaklık sensörünü test et"""
-    print("🌡️ Sıcaklık sensör testi başlatılıyor...")
+    """Temperature sensor test fonksiyonu"""
+    print("🌡️ BARLAS Temperature Sensor Test Başlıyor...")
     
-    # Sensörü başlat
-    sensor = TemperatureSensor()
-    
-    if not sensor.initialize():
-        print("❌ Sensör başlatılamadı!")
-        return
-        
     try:
-        # Sürekli okuma başlat
-        sensor.start_reading()
+        # Temperature sensor initialize
+        temp_sensor = TemperatureSensor()
         
-        # Birkaç ölçüm al
+        print("\n📊 Çevre Koşulları Testi:")
+        
+        for i in range(15):  # 15 ölçüm
+            temperature = temp_sensor.get_temperature()
+            humidity = temp_sensor.get_humidity()
+            pressure = temp_sensor.get_pressure()
+            
+            # Durum analizi
+            temp_status = "🔴 SICAK" if temperature > 50 else \
+                         "🟡 ILIK" if temperature > 30 else \
+                         "🟢 NORMAL"
+            
+            hum_status = "💧 NEMLI" if humidity > 80 else \
+                        "🟡 ORTA" if humidity > 50 else \
+                        "☀️ KURU"
+            
+            # Su sızıntısı riski
+            water_risk = "🚨 SU RİSKİ!" if humidity > 90 and temperature < 20 else "✅ GÜVENLİ"
+            
+            print(f"Test {i+1:2d}: "
+                  f"Sıcaklık: {temperature:5.1f}°C {temp_status} | "
+                  f"Nem: %{humidity:4.1f} {hum_status} | "
+                  f"Basınç: {pressure:7.1f}Pa | {water_risk}")
+            
+            time.sleep(2)
+        
+        print("\n🎯 Su Sızıntısı Alarm Testi:")
+        print("Sensörü nemli ortama yaklaştırın...")
+        
         for i in range(10):
-            temp = sensor.get_last_temperature()
-            age = sensor.get_reading_age()
+            temperature = temp_sensor.get_temperature()
+            humidity = temp_sensor.get_humidity()
             
-            if temp is not None:
-                print(f"\nÖlçüm #{i+1}")
-                print(f"Sıcaklık: {temp:.1f}°C")
-                print(f"Ölçüm yaşı: {age:.1f} saniye")
+            # Kritik nem seviyesi
+            if humidity > 95:
+                print(f"🚨 ALARM! Nem seviyesi: %{humidity:.1f} - Su sızıntısı riski!")
+            elif humidity > 85:
+                print(f"⚠️ DİKKAT! Nem seviyesi: %{humidity:.1f} - Kontrol edin!")
             else:
-                print("\n⚠️ Ölçüm hatası!")
-                
-            time.sleep(1.0)
+                print(f"✅ Normal - Nem: %{humidity:.1f}, Sıcaklık: {temperature:.1f}°C")
             
-    except KeyboardInterrupt:
-        print("\n🛑 Test durduruluyor...")
-    finally:
-        sensor.cleanup()
-        print("✅ Test tamamlandı")
-
-def monitor_temperature():
-    """Sürekli sıcaklık izleme"""
-    print("📊 Sıcaklık izleme başlatılıyor...")
-    
-    sensor = TemperatureSensor()
-    
-    if not sensor.initialize():
-        print("❌ Sensör başlatılamadı!")
-        return
+            time.sleep(1.5)
         
-    try:
-        sensor.start_reading()
+        print("\n🌡️ Sıcaklık Alarm Testi:")
+        print("Sistem sıcaklığı monitörü...")
         
-        while True:
-            temp = sensor.get_last_temperature()
-            if temp is not None:
-                # ANSI renk kodları ile sıcaklığa göre renklendirme
-                if temp > 30:
-                    color = '\033[91m'  # Kırmızı
-                elif temp > 25:
-                    color = '\033[93m'  # Sarı
-                else:
-                    color = '\033[92m'  # Yeşil
-                    
-                reset = '\033[0m'
-                print(f"\rSıcaklık: {color}{temp:.1f}°C{reset}", end='')
+        for i in range(10):
+            temperature = temp_sensor.get_temperature()
             
-            time.sleep(0.5)
+            if temperature > 60:
+                print(f"🔥 AŞIRI SICAK! {temperature:.1f}°C - Sistem kapatılmalı!")
+            elif temperature > 45:
+                print(f"🟡 SICAK! {temperature:.1f}°C - Soğutma gerekli!")
+            else:
+                print(f"❄️ Normal sıcaklık: {temperature:.1f}°C")
             
-    except KeyboardInterrupt:
-        print("\n🛑 İzleme durduruluyor...")
-    finally:
-        sensor.cleanup()
-        print("✅ İzleme tamamlandı")
+            time.sleep(1)
+            
+    except Exception as e:
+        print(f"❌ Temperature sensor hatası: {e}")
+        return False
+    
+    print("✅ Temperature sensor testi tamamlandı!")
+    return True
 
 if __name__ == "__main__":
-    print("DS18B20 Test Menüsü")
-    print("1. Temel Test")
-    print("2. Sürekli İzleme")
-    
-    choice = input("Test seçin (1/2): ")
-    
-    if choice == "1":
-        test_temperature_sensor()
-    elif choice == "2":
-        monitor_temperature()
-    else:
-        print("❌ Geçersiz seçim")
+    test_temperature_sensor()

@@ -1,16 +1,103 @@
 <?xml version="1.0"?>
+<!-- BARLAS Comprehensive Sensor Interface Launch -->
+<!-- Teknofest İnsansız Kara Aracı Yarışması - Tüm Sensör Sistemi -->
+
 <launch>
-    <!-- Sensör arayüz node'u başlat -->
+    <!-- ========== Ana Sensor Interface ========== -->
     <node name="barlas_sensor_interface" pkg="barlas_sensor_interface" type="sensor_interface_node.py" output="screen">
-        <!-- Seri port parametreleri -->
         <param name="serial_port" value="/dev/ttyACM0"/>
         <param name="baud_rate" value="115200"/>
+        <param name="publish_rate" value="20.0"/>
+        <param name="timeout" value="2.0"/>
     </node>
 
-    <!-- RViz ile sensör verilerini görselleştir -->
-    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find barlas_sensor_interface)/rviz/sensors.rviz"/>
+    <!-- ========== Battery Monitoring (INA219) ========== -->
+    <node name="battery_sensor_node" pkg="barlas_sensor_interface" type="battery_sensor.py" output="screen">
+        <param name="i2c_address" value="0x40"/>
+        <param name="shunt_ohms" value="0.1"/>
+        <param name="max_expected_amps" value="3.2"/>
+        <param name="publish_rate" value="2.0"/>
+        <remap from="battery_status" to="/barlas/sensors/battery"/>
+    </node>
 
-    <!-- Statik dönüşümleri yayınla -->
-    <node pkg="tf" type="static_transform_publisher" name="base_to_laser" args="0.2 0 0.1 0 0 0 base_link base_laser 100" />
-    <node pkg="tf" type="static_transform_publisher" name="base_to_imu" args="0 0 0.15 0 0 0 base_link base_imu 100" />
+    <!-- ========== IMU Sensor (MPU9250) ========== -->
+    <node name="imu_sensor_node" pkg="barlas_sensor_interface" type="imu_sensor.py" output="screen">
+        <param name="i2c_address" value="0x68"/>
+        <param name="calibration_samples" value="100"/>
+        <param name="publish_rate" value="50.0"/>
+        <param name="gyro_range" value="2000"/>
+        <param name="accel_range" value="16"/>
+        <remap from="imu/data" to="/barlas/sensors/imu"/>
+        <remap from="imu/mag" to="/barlas/sensors/magnetometer"/>
+    </node>
+
+    <!-- ========== Temperature/Humidity (BME280) ========== -->
+    <node name="temperature_sensor_node" pkg="barlas_sensor_interface" type="temperature_sensor.py" output="screen">
+        <param name="i2c_address" value="0x76"/>
+        <param name="publish_rate" value="1.0"/>
+        <param name="altitude" value="50.0"/>
+        <remap from="temperature" to="/barlas/sensors/temperature"/>
+        <remap from="humidity" to="/barlas/sensors/humidity"/>
+        <remap from="pressure" to="/barlas/sensors/pressure"/>
+    </node>
+
+    <!-- ========== Ultrasonic Sensors (JSN-SR04T) ========== -->
+    <node name="ultrasonic_manager_node" pkg="barlas_sensor_interface" type="ultrasonic_manager.py" output="screen">
+        <param name="front_trig_pin" value="18"/>
+        <param name="front_echo_pin" value="24"/>
+        <param name="left_trig_pin" value="19"/>
+        <param name="left_echo_pin" value="26"/>
+        <param name="right_trig_pin" value="20"/>
+        <param name="right_echo_pin" value="21"/>
+        <param name="publish_rate" value="20.0"/>
+        <param name="max_range" value="6.0"/>
+        <remap from="ultrasonic/front" to="/barlas/sensors/ultrasonic/front"/>
+        <remap from="ultrasonic/left" to="/barlas/sensors/ultrasonic/left"/>
+        <remap from="ultrasonic/right" to="/barlas/sensors/ultrasonic/right"/>
+    </node>
+
+    <!-- ========== LiDAR Manager ========== -->
+    <node name="lidar_manager_node" pkg="barlas_sensor_interface" type="lidar_manager.py" output="screen">
+        <param name="port" value="/dev/ttyUSB1"/>
+        <param name="baudrate" value="115200"/>
+        <param name="frame_id" value="laser_frame"/>
+        <param name="angle_min" value="-3.14159"/>
+        <param name="angle_max" value="3.14159"/>
+        <param name="range_min" value="0.10"/>
+        <param name="range_max" value="10.0"/>
+        <param name="scan_frequency" value="10.0"/>
+        <remap from="scan" to="/barlas/sensors/scan"/>
+    </node>
+
+    <!-- ========== GPS Sensor (Neo-M8N) ========== -->
+    <node name="gps_sensor_node" pkg="barlas_sensor_interface" type="gps_sensor.py" output="screen">
+        <param name="port" value="/dev/ttyUSB2"/>
+        <param name="baudrate" value="9600"/>
+        <param name="frame_id" value="gps_frame"/>
+        <remap from="gps/fix" to="/barlas/sensors/gps"/>
+        <remap from="gps/vel" to="/barlas/sensors/gps_velocity"/>
+    </node>
+
+    <!-- ========== Transform Publishers ========== -->
+    <!-- Base link to sensor transforms -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="imu_tf" args="0.0 0.0 0.15 0 0 0 base_link imu_frame"/>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="laser_tf" args="0.20 0.0 0.25 0 0 0 base_link laser_frame"/>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="gps_tf" args="-0.10 0.0 0.30 0 0 0 base_link gps_frame"/>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="ultrasonic_front_tf" args="0.25 0.0 0.10 0 0 0 base_link ultrasonic_front_frame"/>
+
+    <!-- ========== Sensor Data Fusion ========== -->
+    <node name="sensor_fusion_node" pkg="barlas_sensor_interface" type="sensor_fusion.py" output="screen">
+        <param name="fusion_rate" value="20.0"/>
+        <param name="imu_weight" value="0.7"/>
+        <param name="gps_weight" value="0.3"/>
+        <remap from="fused_odometry" to="/barlas/sensors/odometry"/>
+        <remap from="fused_pose" to="/barlas/sensors/pose"/>
+    </node>
+
+    <!-- ========== Visualization ========== -->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find barlas)/rviz/sensors.rviz"/>
+
 </launch>
