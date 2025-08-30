@@ -15,51 +15,16 @@ from typing import List, Dict, Optional, Tuple
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 try:
-    from src.dart_recognize.yolo_predictions import YOLOPredictions
+    from dart_recognize.yolo_predictions import YOLOPredictions
     YOLO_AVAILABLE = True
-    print("✅ YOLO Dart Recognition modülü yüklendi!")
 except ImportError:
-    try:
-        from dart_recognize.yolo_predictions import YOLOPredictions
-        YOLO_AVAILABLE = True
-        print("✅ YOLO Dart Recognition modülü yüklendi!")
-    except ImportError as e:
-        YOLO_AVAILABLE = False
-        print(f"⚠️ YOLO modülü bulunamadı: {e}")
-        print("Test modu - simülasyon dartları kullanılacak")
-        
-        # Dummy YOLO class with simulated dart detections
-        class YOLOPredictions:
-            def __init__(self):
-                self.detection_counter = 0
-                self.dart_positions = [
-                    {'bbox': [300, 200, 40, 60], 'confidence': 0.8},  # Merkez-sol
-                    {'bbox': [400, 250, 35, 55], 'confidence': 0.7},  # Merkez-sağ
-                    {'bbox': [320, 180, 38, 58], 'confidence': 0.9},  # Üst-merkez
-                    {'bbox': [280, 300, 42, 62], 'confidence': 0.6},  # Alt-sol
-                ]
-            
-            def get_detections(self, frame):
-                # Her 60 frame'de bir farklı dart pozisyonu döndür
-                self.detection_counter += 1
-                
-                # %70 ihtimalle dart tespit et
-                import random
-                if random.random() < 0.7:
-                    # Dönen dart pozisyonu seç
-                    dart_idx = (self.detection_counter // 60) % len(self.dart_positions)
-                    selected_dart = self.dart_positions[dart_idx].copy()
-                    
-                    # Küçük rastgele hareket ekle (gerçekçilik için)
-                    noise_x = random.randint(-5, 5)
-                    noise_y = random.randint(-5, 5)
-                    selected_dart['bbox'][0] += noise_x
-                    selected_dart['bbox'][1] += noise_y
-                    
-                    return [selected_dart]
-                else:
-                    # Bazen dart bulunamaz
-                    return []
+    YOLO_AVAILABLE = False
+    print("YOLO modülü bulunamadı - test modu")
+    
+    # Dummy YOLO class
+    class YOLOPredictions:
+        def get_detections(self, frame):
+            return []
 
 
 class DartDetector:
@@ -77,27 +42,15 @@ class DartDetector:
         """
         self.confidence_threshold = confidence_threshold
         
-        # YOLO detector - global YOLO_AVAILABLE kullan
-        global YOLO_AVAILABLE
-        
+        # YOLO detector
         if YOLO_AVAILABLE:
             try:
-                # Gerçek YOLO modeli ile başlat
-                current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                model_path = os.path.join(current_dir, "src", "dart_recognize", "Model", "weights", "best.onnx")
-                data_path = os.path.join(current_dir, "src", "dart_recognize", "data.yaml")
-                
-                self.yolo_detector = YOLOPredictions(onnx_model_path=model_path, data_yaml_path=data_path)
+                self.yolo_detector = YOLOPredictions()
                 print("[DartDetector] ✅ YOLO dart detector yüklendi")
-                print(f"[DartDetector] Model: {model_path}")
-                print(f"[DartDetector] Config: {data_path}")
             except Exception as e:
                 print(f"[DartDetector] ❌ YOLO yükleme hatası: {e}")
-                print("[DartDetector] Simülasyon moduna geçiliyor...")
-                YOLO_AVAILABLE = False
-                self.yolo_detector = YOLOPredictions()  # Fallback to dummy
-        
-        if not YOLO_AVAILABLE:
+                raise
+        else:
             self.yolo_detector = YOLOPredictions()  # Dummy
             print("[DartDetector] ⚠️ YOLO simülasyon modu")
         
@@ -123,9 +76,6 @@ class DartDetector:
         """
         
         try:
-            # Frame'i sakla (Hough Circle için)
-            self._last_frame = frame.copy()
-            
             # YOLO ile tespit yap
             raw_detections = self.yolo_detector.get_detections(frame)
             self.total_detections += len(raw_detections)
@@ -205,7 +155,7 @@ class DartDetector:
 
     def get_best_dart(self, detections: List[Dict]) -> Optional[Dict]:
         """
-        En iyi tek dart'ı seçer (en yüksek güven + Hough Circle ile merkez düzeltmesi)
+        En iyi dart'ı seçer (en yüksek güven)
         
         Args:
             detections: Tespit edilen dart'lar
@@ -216,91 +166,7 @@ class DartDetector:
         if not detections:
             return None
         
-        # Tek dart varsa onu döndür
-        if len(detections) == 1:
-            return self.refine_dart_center(detections[0])
-        
-        # En yüksek güvenli dart'ı seç
-        best_dart = max(detections, key=lambda d: d['confidence'])
-        
-        # Hough Circle ile merkezi düzelt
-        return self.refine_dart_center(best_dart)
-    
-    def refine_dart_center(self, dart: Dict) -> Dict:
-        """
-        Hough Circle algoritması ile dart merkezini hassaslaştırır
-        
-        Args:
-            dart: YOLO'dan gelen dart bilgisi
-            
-        Returns:
-            Merkezi düzeltilmiş dart bilgisi
-        """
-        # Eğer son frame yoksa orijinal dart'ı döndür
-        if not hasattr(self, '_last_frame') or self._last_frame is None:
-            return dart
-            
-        try:
-            frame = self._last_frame
-            x, y, w, h = dart['bbox']
-            
-            # Dart bölgesini kırp
-            dart_region = frame[y:y+h, x:x+w]
-            
-            if dart_region.size == 0:
-                return dart
-            
-            # Gri tonlamaya çevir
-            gray = cv2.cvtColor(dart_region, cv2.COLOR_BGR2GRAY)
-            
-            # Gaussian blur uygula
-            blurred = cv2.GaussianBlur(gray, (9, 9), 2)
-            
-            # Hough Circle parametreleri
-            circles = cv2.HoughCircles(
-                blurred,
-                cv2.HOUGH_GRADIENT,
-                dp=1,              # Accumulator resolution
-                minDist=30,        # Minimum mesafe circle'lar arası
-                param1=50,         # Canny edge threshold
-                param2=30,         # Accumulator threshold
-                minRadius=5,       # Minimum circle radius
-                maxRadius=min(w, h)//2  # Maximum circle radius
-            )
-            
-            if circles is not None:
-                circles = np.round(circles[0, :]).astype("int")
-                
-                # En büyük circle'ı seç (dart merkezi olma ihtimali yüksek)
-                best_circle = None
-                max_radius = 0
-                
-                for (cx, cy, r) in circles:
-                    if r > max_radius:
-                        max_radius = r
-                        best_circle = (cx, cy, r)
-                
-                if best_circle:
-                    cx, cy, r = best_circle
-                    
-                    # Dart region'daki koordinatları global koordinatlara çevir
-                    global_cx = x + cx
-                    global_cy = y + cy
-                    
-                    # Dart bilgisini güncelle
-                    refined_dart = dart.copy()
-                    refined_dart['center'] = (global_cx, global_cy)
-                    refined_dart['hough_radius'] = r
-                    refined_dart['refined'] = True
-                    
-                    print(f"[DartDetector] 🎯 Hough Circle: Merkez ({global_cx}, {global_cy}), R={r}")
-                    return refined_dart
-        
-        except Exception as e:
-            print(f"[DartDetector] Hough Circle hatası: {e}")
-        
-        # Hata durumunda orijinal dart'ı döndür
-        return dart
+        return max(detections, key=lambda d: d['confidence'])
     
     def set_confidence_threshold(self, new_threshold: float):
         """Güven eşiğini günceller"""

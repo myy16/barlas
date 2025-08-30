@@ -148,67 +148,22 @@ class DartLaserTargetingSystem:
                 current_time = time.time()
                 
                 if detections:
-                    # EN İYİ TEK DART'I SEÇ (Hough Circle ile merkez düzeltmesi)
-                    best_dart = self.dart_detector.get_best_dart(detections)
+                    # Kararli dartı sec
+                    stable_dart = self.dart_detector.get_stable_dart(
+                        detections, previous_center, self.stability_threshold)
                     
-                    if best_dart and best_dart['confidence'] >= self.target_confidence_threshold:
-                        # Kararlı dart'ı da kontrol et
-                        stable_dart = self.dart_detector.get_stable_dart(
-                            [best_dart], previous_center, self.stability_threshold)
+                    if stable_dart:
+                        target_x, target_y = stable_dart['center']
+                        confidence = stable_dart['confidence']
                         
-                        if stable_dart:
-                            target_x, target_y = stable_dart['center']
-                            confidence = stable_dart['confidence']
+                        # Hedef stabil mi kontrol et
+                        if self.current_target is None:
+                            self.current_target = (target_x, target_y)
+                            previous_center = (target_x, target_y)
+                            last_target_time = current_time
+                            self.target_lock_duration = 0
                             
-                            # Hough Circle refinement bilgisi
-                            hough_info = ""
-                            if stable_dart.get('refined', False):
-                                hough_info = f" [Hough R={stable_dart.get('hough_radius', '?')}]"
-                            
-                            # Hedef stabil mi kontrol et
-                            if self.current_target is None:
-                                self.current_target = (target_x, target_y)
-                                previous_center = (target_x, target_y)
-                                last_target_time = current_time
-                                self.target_lock_duration = 0
-                                
-                                print(f"[DartLaserSystem] 🎯 YENİ HEDEF: ({target_x}, {target_y}), Güven: {confidence:.2f}{hough_info}")
-                            
-                            else:
-                                # Hedef kararlılığını kontrol et
-                                prev_x, prev_y = self.current_target
-                                distance = math.sqrt((target_x - prev_x)**2 + (target_y - prev_y)**2)
-                                
-                                if distance < self.stability_threshold:
-                                    # Hedef stabil
-                                    self.target_lock_duration = current_time - last_target_time
-                                    previous_center = (target_x, target_y)
-                                    
-                                    print(f"[DartLaserSystem] 📍 Hedef stabil - Kilit süresi: {self.target_lock_duration:.1f}s{hough_info}")
-                                    
-                                    # Pan-tilt pozisyonu göster
-                                    try:
-                                        pan_pos, tilt_pos = self.laser_pantilt.get_current_position()
-                                        print(f"[DartLaserSystem] 🧭 Pan: {pan_pos:.1f}°, Tilt: {tilt_pos:.1f}°")
-                                    except:
-                                        print("[DartLaserSystem] 🧭 Pan-Tilt pozisyon alınamadı")
-                                    
-                                    # Yeterli süre kilitlenmişse lazer ateşle
-                                    if (self.target_lock_duration >= self.target_lock_time and 
-                                        not self.is_targeting and 
-                                        current_time > laser_end_time):
-                                        
-                                        self._fire_laser_at_target(target_x, target_y)
-                                        laser_end_time = current_time + self.laser_pulse_duration
-                                
-                                else:
-                                    # Hedef değişti, yeniden başla
-                                    self.current_target = (target_x, target_y)
-                                    previous_center = (target_x, target_y)
-                                    last_target_time = current_time
-                                    self.target_lock_duration = 0
-                                    
-                                    print(f"[DartLaserSystem] 🔄 Hedef değişti: ({target_x}, {target_y}){hough_info}")
+                            print(f"[DartLaserSystem] 🎯 YENI HEDEF: ({target_x}, {target_y}), Guven: {confidence:.2f}")
                         
                         else:
                             # Hedef kararliligini kontrol et
