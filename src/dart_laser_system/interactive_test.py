@@ -7,7 +7,7 @@ Kullanıcı dostu test menüsü
 import cv2
 import time
 import sys
-from targeting_system import DartLaserTargetingSystem
+from targeting_system_enhanced import DartLaserTargetingSystem
 
 def main_menu():
     """Ana test menüsü"""
