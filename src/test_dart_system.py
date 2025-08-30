@@ -65,18 +65,18 @@ def test_pantilt_controller():
         controller.move_to_position(90, 90)
         
         # Pozisyon bilgisi
-        pan_pos, tilt_pos = controller.get_current_position()
+        pan_pos, tilt_pos = controller.pan_position, controller.tilt_position
         print(f"🧭 Mevcut pozisyon - Pan: {pan_pos}°, Tilt: {tilt_pos}°")
         
         # Laser test
         print("💡 Laser test...")
-        controller.turn_laser_on()
+        controller.enable_laser()
         print("✅ Laser açık")
         
         import time
         time.sleep(1)
         
-        controller.turn_laser_off()
+        controller.disable_laser()
         print("✅ Laser kapalı")
         
         # Hareket testi

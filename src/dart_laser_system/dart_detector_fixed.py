@@ -15,11 +15,18 @@ from typing import List, Dict, Optional, Tuple
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 try:
-    from dart_recognize.yolo_predictions import YOLOPredictions
+    from src.dart_recognize.yolo_predictions import YOLOPredictions
     YOLO_AVAILABLE = True
+    print("✅ YOLO Dart Recognition modülü yüklendi!")
 except ImportError:
-    YOLO_AVAILABLE = False
-    print("YOLO modülü bulunamadı - test modu")
+    try:
+        from dart_recognize.yolo_predictions import YOLOPredictions
+        YOLO_AVAILABLE = True
+        print("✅ YOLO Dart Recognition modülü yüklendi!")
+    except ImportError as e:
+        YOLO_AVAILABLE = False
+        print(f"⚠️ YOLO modülü bulunamadı: {e}")
+        print("Test modu - simülasyon dartları kullanılacak")
     
     # Dummy YOLO class
     class YOLOPredictions:
@@ -42,15 +49,28 @@ class DartDetector:
         """
         self.confidence_threshold = confidence_threshold
         
-        # YOLO detector
+        # YOLO detector - global değişkeni güvenli kullan
+        global YOLO_AVAILABLE
+        
         if YOLO_AVAILABLE:
             try:
-                self.yolo_detector = YOLOPredictions()
+                # Gerçek YOLO modeli ile başlat
+                current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                model_path = os.path.join(current_dir, "src", "dart_recognize", "Model", "weights", "best.onnx")
+                data_path = os.path.join(current_dir, "src", "dart_recognize", "data.yaml")
+                
+                self.yolo_detector = YOLOPredictions(onnx_model_path=model_path, data_yaml_path=data_path)
+                self.yolo_available = True
                 print("[DartDetector] ✅ YOLO dart detector yüklendi")
+                print(f"[DartDetector] Model: {model_path}")
+                print(f"[DartDetector] Config: {data_path}")
             except Exception as e:
                 print(f"[DartDetector] ❌ YOLO yükleme hatası: {e}")
-                raise
+                print("[DartDetector] Simülasyon moduna geçiliyor...")
+                self.yolo_available = False
+                self.yolo_detector = YOLOPredictions()  # Fallback to dummy
         else:
+            self.yolo_available = False
             self.yolo_detector = YOLOPredictions()  # Dummy
             print("[DartDetector] ⚠️ YOLO simülasyon modu")
         
