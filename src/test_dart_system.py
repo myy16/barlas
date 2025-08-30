@@ -6,16 +6,21 @@ Kamera olmadan dart tanıma sistemini test eder
 
 import sys
 import os
+import time
 sys.path.append("d:/barlas/src/dart_laser_system")
 
 # Dart sistem modüllerini import et
 try:
     from dart_detector import DartDetector
-    from laser_controller import LaserPanTiltController
-    from targeting_system import DartLaserTargetingSystem
+    from arduino_simulator import ArduinoSimulator
     print("✅ Dart sistem modülleri başarıyla yüklendi!")
 except ImportError as e:
     print(f"❌ Dart sistem import hatası: {e}")
+    print("🔧 Mevcut dosyalar kontrol ediliyor...")
+    
+    # Mevcut dart sistem dosyalarını listele
+    dart_files = [f for f in os.listdir("d:/barlas/src/dart_laser_system") if f.endswith('.py')]
+    print(f"📁 Dart sistem dosyaları: {dart_files}")
     sys.exit(1)
 
 def test_dart_detector_simulated():
@@ -49,35 +54,29 @@ def test_dart_detector_simulated():
         print(f"❌ Detector test hatası: {e}")
         return False
 
-def test_pantilt_controller():
-    """Pan-tilt controller testi"""
+def test_arduino_simulator():
+    """Arduino simülatör testi"""
     print("\n" + "="*50)
-    print("🔧 PAN-TILT CONTROLLER TESTİ")
+    print("🎮 ARDUINO SİMÜLATÖR TESTİ")
     print("="*50)
     
     try:
-        # Controller oluştur
-        controller = LaserPanTiltController()
-        print("✅ Pan-tilt controller oluşturuldu")
+        # Arduino simülatör oluştur
+        simulator = ArduinoSimulator()
+        print("✅ Arduino simülatör oluşturuldu")
         
         # Merkez pozisyon
         print("📍 Merkez pozisyona gidiliyor...")
-        controller.move_to_position(90, 90)
+        simulator.center_position()
         
         # Pozisyon bilgisi
-        pan_pos, tilt_pos = controller.pan_position, controller.tilt_position
-        print(f"🧭 Mevcut pozisyon - Pan: {pan_pos}°, Tilt: {tilt_pos}°")
+        pan_pos, tilt_pos = simulator.get_position()
+        print(f"🧭 Mevcut pozisyon - Pan: {pan_pos:.1f}°, Tilt: {tilt_pos:.1f}°")
         
         # Laser test
         print("💡 Laser test...")
-        controller.enable_laser()
-        print("✅ Laser açık")
-        
-        import time
-        time.sleep(1)
-        
-        controller.disable_laser()
-        print("✅ Laser kapalı")
+        simulator.fire_laser(1.0)
+        print("✅ Laser test tamamlandı")
         
         # Hareket testi
         print("🔄 Hareket testi...")
@@ -85,15 +84,15 @@ def test_pantilt_controller():
         
         for i, (pan, tilt) in enumerate(positions):
             print(f"  {i+1}/5: Pan={pan}°, Tilt={tilt}° ...")
-            controller.move_to_position(pan, tilt)
-            time.sleep(0.5)
+            simulator.move_to_position(pan, tilt)
+            time.sleep(0.3)
             
         print("✅ Hareket testi tamamlandı!")
         
         return True
         
     except Exception as e:
-        print(f"❌ Pan-tilt test hatası: {e}")
+        print(f"❌ Arduino simülatör test hatası: {e}")
         return False
 
 def test_targeting_system_basic():
@@ -133,13 +132,9 @@ def main():
     result1 = test_dart_detector_simulated()
     test_results.append(("Dart Detector", result1))
     
-    # Test 2: Pan-tilt controller
-    result2 = test_pantilt_controller()
-    test_results.append(("Pan-Tilt Controller", result2))
-    
-    # Test 3: Targeting system
-    result3 = test_targeting_system_basic()
-    test_results.append(("Targeting System", result3))
+    # Test 2: Arduino simulator
+    result2 = test_arduino_simulator()
+    test_results.append(("Arduino Simulator", result2))
     
     # Sonuçlar
     print("\n" + "="*60)

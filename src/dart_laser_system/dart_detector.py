@@ -106,6 +106,27 @@ class DartDetector:
         self.valid_detections = 0
         self.last_detection_time = 0
         
+        # Hough Circle parametreleri - optimize edilebilir
+        self.hough_params = {
+            'dp': 1,
+            'minDist_ratio': 0.3,      # dart boyutuna orantılı
+            'param1': 60,              # Canny edge threshold
+            'param2': 25,              # Accumulator threshold  
+            'minRadius_ratio': 0.125,  # dart boyutuna orantılı (1/8)
+            'blur_kernel': 9,          # Gaussian blur kernel boyutu
+            'blur_sigma': 2            # Gaussian blur sigma
+        }
+        
+        # Kamera-servo kalibrasyonu (yolo_arduino_dart_system.py'den alındı)
+        self.calibration = {
+            'frame_width': 640,
+            'frame_height': 480,
+            'horizontal_fov': 60,    # Kamera yatay görüş açısı
+            'vertical_fov': 45,      # Kamera dikey görüş açısı
+            'offset_x': 0,           # Kalibrasyon offset'i
+            'offset_y': 0
+        }
+        
         print(f"[DartDetector] Hazır - Güven eşiği: {confidence_threshold}")
     
     def detect_darts(self, frame) -> List[Dict]:
@@ -203,18 +224,23 @@ class DartDetector:
         
         return best_dart
 
-    def get_best_dart(self, detections: List[Dict]) -> Optional[Dict]:
+    def get_best_dart(self, detections: List[Dict], frame=None) -> Optional[Dict]:
         """
         En iyi tek dart'ı seçer (en yüksek güven + Hough Circle ile merkez düzeltmesi)
         
         Args:
             detections: Tespit edilen dart'lar
+            frame: Hough Circle için frame (isteğe bağlı)
             
         Returns:
             En iyi dart veya None
         """
         if not detections:
             return None
+        
+        # Frame'i sakla
+        if frame is not None:
+            self._last_frame = frame
         
         # Tek dart varsa onu döndür
         if len(detections) == 1:
@@ -253,19 +279,26 @@ class DartDetector:
             # Gri tonlamaya çevir
             gray = cv2.cvtColor(dart_region, cv2.COLOR_BGR2GRAY)
             
-            # Gaussian blur uygula
-            blurred = cv2.GaussianBlur(gray, (9, 9), 2)
+            # Gaussian blur uygula - parametrik
+            kernel_size = self.hough_params['blur_kernel']
+            sigma = self.hough_params['blur_sigma']
+            blurred = cv2.GaussianBlur(gray, (kernel_size, kernel_size), sigma)
             
-            # Hough Circle parametreleri
+            # Dinamik parametreler hesapla
+            min_dist = int(min(w, h) * self.hough_params['minDist_ratio'])
+            min_radius = max(3, int(min(w, h) * self.hough_params['minRadius_ratio']))
+            max_radius = min(w, h) // 2
+            
+            # Hough Circle parametreleri - optimize edilmiş
             circles = cv2.HoughCircles(
                 blurred,
                 cv2.HOUGH_GRADIENT,
-                dp=1,              # Accumulator resolution
-                minDist=30,        # Minimum mesafe circle'lar arası
-                param1=50,         # Canny edge threshold
-                param2=30,         # Accumulator threshold
-                minRadius=5,       # Minimum circle radius
-                maxRadius=min(w, h)//2  # Maximum circle radius
+                dp=self.hough_params['dp'],
+                minDist=min_dist,
+                param1=self.hough_params['param1'],
+                param2=self.hough_params['param2'],
+                minRadius=min_radius,
+                maxRadius=max_radius
             )
             
             if circles is not None:
@@ -306,6 +339,75 @@ class DartDetector:
         """Güven eşiğini günceller"""
         self.confidence_threshold = max(0.1, min(1.0, new_threshold))
         print(f"[DartDetector] Güven eşiği güncellendi: {self.confidence_threshold}")
+    
+    def set_hough_params(self, **kwargs):
+        """
+        Hough Circle parametrelerini günceller
+        
+        Kullanılabilir parametreler:
+        - param1: Canny edge threshold (varsayılan: 60)
+        - param2: Accumulator threshold (varsayılan: 25) 
+        - minDist_ratio: Min distance ratio to dart size (varsayılan: 0.3)
+        - minRadius_ratio: Min radius ratio to dart size (varsayılan: 0.125)
+        - blur_kernel: Gaussian blur kernel size (varsayılan: 9)
+        - blur_sigma: Gaussian blur sigma (varsayılan: 2)
+        """
+        for key, value in kwargs.items():
+            if key in self.hough_params:
+                self.hough_params[key] = value
+                print(f"[DartDetector] Hough parametresi güncellendi: {key} = {value}")
+            else:
+                print(f"[DartDetector] ⚠️ Bilinmeyen Hough parametresi: {key}")
+    
+    def get_hough_params(self) -> Dict:
+        """Mevcut Hough parametrelerini döndürür"""
+        return self.hough_params.copy()
+    
+    def pixel_to_servo_angle(self, pixel_x: int, pixel_y: int, current_pan: float = 90, current_tilt: float = 90) -> Tuple[float, float]:
+        """
+        Piksel koordinatlarını servo açılarına çevir (yolo_arduino_dart_system.py'den optimize edildi)
+        
+        Args:
+            pixel_x, pixel_y: Hedef piksel koordinatları
+            current_pan, current_tilt: Mevcut servo pozisyonları
+            
+        Returns:
+            (target_pan, target_tilt) servo açıları
+        """
+        # Kamera merkezi
+        center_x = self.calibration['frame_width'] / 2
+        center_y = self.calibration['frame_height'] / 2
+        
+        # Offset uygula
+        offset_x = pixel_x - center_x + self.calibration['offset_x']
+        offset_y = pixel_y - center_y + self.calibration['offset_y']
+        
+        # Açı hesapla
+        pan_adjustment = (offset_x / center_x) * (self.calibration['horizontal_fov'] / 2)
+        tilt_adjustment = -(offset_y / center_y) * (self.calibration['vertical_fov'] / 2)
+        
+        target_pan = current_pan + pan_adjustment
+        target_tilt = current_tilt + tilt_adjustment
+        
+        # Servo limitleri uygula
+        target_pan = max(0, min(180, target_pan))
+        target_tilt = max(20, min(160, target_tilt))
+        
+        return target_pan, target_tilt
+    
+    def set_camera_calibration(self, frame_width: int = 640, frame_height: int = 480, 
+                              horizontal_fov: float = 60, vertical_fov: float = 45,
+                              offset_x: float = 0, offset_y: float = 0):
+        """Kamera kalibrasyon parametrelerini ayarla"""
+        self.calibration.update({
+            'frame_width': frame_width,
+            'frame_height': frame_height, 
+            'horizontal_fov': horizontal_fov,
+            'vertical_fov': vertical_fov,
+            'offset_x': offset_x,
+            'offset_y': offset_y
+        })
+        print(f"[DartDetector] Kalibrasyon güncellendi: {frame_width}x{frame_height}, FOV: {horizontal_fov}°x{vertical_fov}°")
     
     def get_detection_stats(self) -> Dict:
         """Tespit istatistiklerini döndürür"""
