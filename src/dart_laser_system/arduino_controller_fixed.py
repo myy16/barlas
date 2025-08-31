@@ -159,21 +159,36 @@ class ArduinoPanTiltController:
     def send_test_command(self) -> bool:
         """Test komutu gönder"""
         try:
+            print("[ArduinoPanTilt] 📡 Test komutları gönderiliyor...")
+            
+            # Buffer'ı temizle
+            self.serial_conn.reset_input_buffer()
+            self.serial_conn.reset_output_buffer()
+            
             # Birkaç farklı test komutu dene
             test_commands = ["TEST", "STATUS", "PING"]
             
             for cmd in test_commands:
+                print(f"[ArduinoPanTilt] → Komut: {cmd}")
                 self.serial_conn.write(f"{cmd}\\n".encode())
                 self.serial_conn.flush()
-                time.sleep(0.2)
+                time.sleep(0.5)  # Daha uzun bekle
                 
-                if self.serial_conn.in_waiting > 0:
+                # Yanıt kontrol et
+                bytes_waiting = self.serial_conn.in_waiting
+                print(f"[ArduinoPanTilt] ← Buffer'da {bytes_waiting} byte var")
+                
+                if bytes_waiting > 0:
                     response = self.serial_conn.readline().decode().strip()
-                    print(f"[ArduinoPanTilt] Arduino yanıtı: {response}")
+                    print(f"[ArduinoPanTilt] ← Arduino yanıtı: '{response}'")
                     
-                    if any(word in response.upper() for word in ["OK", "READY", "BARLAS"]):
+                    if any(word in response.upper() for word in ["OK", "READY", "BARLAS", "TEST"]):
+                        print("[ArduinoPanTilt] ✅ Arduino yanıt verdi!")
                         return True
+                else:
+                    print("[ArduinoPanTilt] ⚠️ Arduino'dan yanıt yok")
             
+            print("[ArduinoPanTilt] ❌ Hiçbir test komutu yanıt alamadı")
             return False
             
         except Exception as e:

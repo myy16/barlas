@@ -31,8 +31,18 @@ class YOLOArduinoDartSystem:
     Gelişmiş UI ve kontrol özellikleri ile
     """
     
-    def __init__(self, camera_index=0):
+    def __init__(self, camera_index=0, arduino_port=None):
+        """
+        YOLO + Arduino Dart Targeting System
+        
+        Args:
+            camera_index: Kamera index (0 = varsayılan)  
+            arduino_port: Arduino port (None = otomatik, "/dev/ttyACM0" = manuel)
+        """
         print("[YOLOArduinoSystem] 🎯 YOLO+Arduino Dart Sistem başlatılıyor...")
+        
+        # Manuel Arduino port
+        self.manual_arduino_port = arduino_port
         
         # Dart Detector (mevcut optimize edilmiş sistemi kullan)
         try:
@@ -83,7 +93,21 @@ class YOLOArduinoDartSystem:
     def initialize_arduino(self):
         """Arduino Controller başlat - Gerçek veya Simülatör"""
         if ARDUINO_AVAILABLE:
-            # Önce gerçek Arduino'yu dene - Linux ve Windows portları
+            # Manuel port belirtilmişse önce onu dene
+            if self.manual_arduino_port:
+                print(f"[YOLOArduinoSystem] 🎯 Manuel Arduino portu deneniyor: {self.manual_arduino_port}")
+                try:
+                    arduino = ArduinoPanTiltController(port=self.manual_arduino_port, baud_rate=9600, timeout=5)
+                    if arduino.connect():
+                        print(f"[YOLOArduinoSystem] ✅ Manuel Arduino bağlandı: {self.manual_arduino_port}")
+                        return arduino
+                    else:
+                        arduino.disconnect()
+                        print(f"[YOLOArduinoSystem] ❌ Manuel port bağlantısı başarısız: {self.manual_arduino_port}")
+                except Exception as e:
+                    print(f"[YOLOArduinoSystem] ❌ Manuel port hatası: {e}")
+            
+            # Otomatik port tarama
             linux_ports = ['/dev/ttyACM0', '/dev/ttyUSB0', '/dev/ttyUSB1']
             windows_ports = ['COM7', 'COM3', 'COM4', 'COM5', 'COM6', 'COM8']
             
@@ -107,9 +131,24 @@ class YOLOArduinoDartSystem:
                 except Exception:
                     continue
             
-            print("[YOLOArduinoSystem] ⚠️ Gerçek Arduino bulunamadı, simülatör kullanılıyor")
+            print("[YOLOArduinoSystem] ❌ Gerçek Arduino bulunamadı!")
+            print("[YOLOArduinoSystem] ⚠️ Simülatör kullanmak istiyor musunuz? (Y/n)")
+            
+            # Kullanıcıdan onay al
+            try:
+                import sys
+                if sys.stdin.isatty():  # Terminal varsa kullanıcıdan sor
+                    response = input("Simülatör kullanılsın mı? (Y/n): ").strip().lower()
+                    if response in ['n', 'no', 'hayır']:
+                        print("[YOLOArduinoSystem] ❌ Gerçek Arduino bağlantısı zorunlu. Sistem durduruluyor.")
+                        return None
+                else:
+                    print("[YOLOArduinoSystem] ⚠️ Terminal yok, simülatör otomatik başlatılıyor")
+            except:
+                print("[YOLOArduinoSystem] ⚠️ Kullanıcı girişi alınamadı, simülatör başlatılıyor")
         
         # Simülatör kullan
+        print("[YOLOArduinoSystem] 🎮 Arduino Simulator başlatılıyor...")
         return ArduinoSimulator()
     
     def ensure_laser_off_at_startup(self):
@@ -733,6 +772,7 @@ def main():
     # Komut satırı argümanları
     parser = argparse.ArgumentParser(description='BARLAS YOLO+Arduino Dart Targeting System')
     parser.add_argument('--camera', type=int, default=0, help='Kamera index (0=dahili, 1=USB)')
+    parser.add_argument('--arduino', type=str, default=None, help='Arduino port (örn: /dev/ttyACM0)')
     parser.add_argument('--list-cameras', action='store_true', help='Mevcut kameraları listele')
     args = parser.parse_args()
     
@@ -758,12 +798,12 @@ def main():
     print("Gelişmiş UI ve Kontrol Özellikleri")
     print("=" * 70)
     print(f"📹 Kamera: {args.camera} ({'Dahili' if args.camera==0 else 'USB'})")
-    print(f"🔌 Arduino: Otomatik tespit")
+    print(f"🔌 Arduino: {args.arduino if args.arduino else 'Otomatik tespit'}")
     print("=" * 70)
     
     try:
         # Sistem oluştur
-        dart_system = YOLOArduinoDartSystem(camera_index=args.camera)
+        dart_system = YOLOArduinoDartSystem(camera_index=args.camera, arduino_port=args.arduino)
         
         # Sistemi başlat
         dart_system.run_dart_targeting()
