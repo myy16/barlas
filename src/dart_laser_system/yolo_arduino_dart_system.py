@@ -54,8 +54,7 @@ class YOLOArduinoDartSystem:
                 param1=60,           # Canny edge threshold
                 param2=20,           # Accumulator threshold (daha hassas)
                 minDist_ratio=0.25,  # Daha yakın circle'lara izin ver
-                minRadius_ratio=0.08,
-                maxRadius_ratio=0.6
+                minRadius_ratio=0.08
             )
             print("[YOLOArduinoSystem] ✅ Dart Detector yüklendi (optimize edilmiş parametreler)")
             
@@ -546,12 +545,6 @@ class YOLOArduinoDartSystem:
         target_tilt = 90 - (offset_y * degrees_per_pixel_y)  # Y eksenini ters çevir
         
         print(f"[YOLOArduinoSystem] 🎯 Pixel({pixel_x},{pixel_y}) -> Servo({target_pan:.1f}°, {target_tilt:.1f}°)")
-        
-        # Sınırları kontrol et
-        target_pan = max(10, min(170, target_pan))
-        target_tilt = max(20, min(160, target_tilt))
-        
-        return target_pan, target_tilt
         
         # Sınırları kontrol et
         target_pan = max(10, min(170, target_pan))
