@@ -83,11 +83,22 @@ class YOLOArduinoDartSystem:
     def initialize_arduino(self):
         """Arduino Controller başlat - Gerçek veya Simülatör"""
         if ARDUINO_AVAILABLE:
-            # Önce gerçek Arduino'yu dene
-            for port in ['COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8']:
+            # Önce gerçek Arduino'yu dene - Linux ve Windows portları
+            linux_ports = ['/dev/ttyACM0', '/dev/ttyUSB0', '/dev/ttyUSB1']
+            windows_ports = ['COM7', 'COM3', 'COM4', 'COM5', 'COM6', 'COM8']
+            
+            # İşletim sistemine göre port listesi seç
+            import sys
+            if sys.platform.startswith('linux'):
+                ports_to_try = linux_ports + windows_ports
+            else:
+                ports_to_try = windows_ports + linux_ports
+            
+            for port in ports_to_try:
                 try:
                     print(f"[YOLOArduinoSystem] 🔍 Arduino bağlantısı deneniyor: {port}")
-                    arduino = ArduinoPanTiltController(port=port)
+                    # Arduino Mega 9600 baud rate kullanıyor
+                    arduino = ArduinoPanTiltController(port=port, baud_rate=9600, timeout=5)
                     if arduino.connect():
                         print(f"[YOLOArduinoSystem] ✅ Gerçek Arduino bağlandı: {port}")
                         return arduino

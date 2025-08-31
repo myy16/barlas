@@ -64,12 +64,15 @@ class ArduinoPanTiltController:
         """Arduino portunu otomatik tespit et"""
         print("[ArduinoPanTilt] Arduino portu aranıyor...")
         
-        # Windows COM portları
+        # İşletim sistemine göre öncelikli portlar
         if sys.platform.startswith('win'):
-            possible_ports = [f'COM{i}' for i in range(1, 21)]
-        # Linux USB portları
+            # Windows portları
+            possible_ports = [f'COM{i}' for i in range(3, 21)]
         else:
-            possible_ports = glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*')
+            # Linux portları - Arduino Mega için /dev/ttyACM0 öncelikli
+            possible_ports = ['/dev/ttyACM0', '/dev/ttyACM1'] + glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*')
+            # Tekrarları kaldır
+            possible_ports = list(dict.fromkeys(possible_ports))
         
         for port in possible_ports:
             try:
@@ -123,7 +126,7 @@ class ArduinoPanTiltController:
             
             # Arduino'nun bootloader'ından çıkmasını bekle
             print("[ArduinoPanTilt] Arduino başlatılıyor...")
-            time.sleep(3)
+            time.sleep(5)  # 5 saniye bekle (artırıldı)
             
             # Buffer'ı temizle
             self.serial_conn.reset_input_buffer()
