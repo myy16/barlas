@@ -1,63 +1,50 @@
-/*
-  BARLAS Arduino Pan-Tilt Controller - İyileştirilmiş Versiyon
-  Servo motor kontrolü ve lazer kontrolü
-  Daha güvenilir serial haberleşme ve hareket kontrol
-  
-  Bağlantılar:
-  - Pan Servo  -> Pin 9 (PWM)
-  - Tilt Servo -> Pin 10 (PWM)  
-  - Laser LED  -> Pin 13 (Digital Out)
-  - 5V -> Servo VCC (Ayrı güç kaynağı önerilir)
-  - GND -> Ortak GND
-  
-  Komutlar:
-  - TEST -> Bağlantı testi
-  - MOVE,pan,tilt -> Her iki servoyu hareket ettir
-  - PAN,angle -> Sadece pan servo
-  - TILT,angle -> Sadece tilt servo
-  - CENTER -> Merkez pozisyon (90,90)
-  - LASER,ON/OFF -> Lazer kontrol
-  - STATUS -> Mevcut durum
-*/
-
 #include <Servo.h>
 
-// Servo nesneleri
 Servo panServo;
 Servo tiltServo;
-
-// Pin tanımları
-const int PAN_PIN = 9;
-const int TILT_PIN = 10;
-const int LASER_PIN = 13;
-const int LED_BUILTIN_PIN = LED_BUILTIN;
-
-// Servo pozisyonları
-volatile int currentPan = 90;
-volatile int currentTilt = 90;
-
-// Servo limitleri - genişletilmiş
-const int PAN_MIN = 0;
-const int PAN_MAX = 180;
-const int TILT_MIN = 10;
-const int TILT_MAX = 170;
-
-// Lazer durumu
-volatile bool laserActive = false;
-
-// Serial buffer ve durum
-String inputBuffer = "";
-bool commandReady = false;
-unsigned long lastCommandTime = 0;
-unsigned long heartbeatTime = 0;
-
-// Servo hareket parametreleri
-const int SERVO_DELAY = 15;  // Servo hareket süre delay (ms)
-const int MAX_MOVE_STEP = 5; // Maksimum tek seferde hareket açısı
+int laserPin = 13;
 
 void setup() {
-  // Serial başlat - daha yüksek baud rate
   Serial.begin(9600);
+  panServo.attach(9);    // Pan servo
+  tiltServo.attach(10);  // Tilt servo
+  pinMode(laserPin, OUTPUT);
+  panServo.write(90);    // başlangıç
+  tiltServo.write(90);
+  
+  Serial.println("BARLAS Arduino Ready");
+}
+
+void loop() {
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+
+    if (cmd.startsWith("MOVE")) {
+      int comma1 = cmd.indexOf(',');
+      int comma2 = cmd.lastIndexOf(',');
+      int pan = cmd.substring(comma1 + 1, comma2).toInt();
+      int tilt = cmd.substring(comma2 + 1).toInt();
+      panServo.write(pan);
+      tiltServo.write(tilt);
+      Serial.println("Moved");
+    }
+    else if (cmd == "LASER,ON") {
+      digitalWrite(laserPin, HIGH);
+      Serial.println("Laser ON");
+    }
+    else if (cmd == "LASER,OFF") {
+      digitalWrite(laserPin, LOW);
+      Serial.println("Laser OFF");
+    }
+    else if (cmd == "TEST") {
+      Serial.println("OK");
+    }
+    else if (cmd == "STATUS") {
+      Serial.println("READY");
+    }
+  }
+}
   while (!Serial) {
     ; // Serial hazır olana kadar bekle
   }
