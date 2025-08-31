@@ -44,49 +44,60 @@ class ArduinoPanTiltController:
             # Yanıt kontrol et
             if self.ser.in_waiting > 0:
                 response = self.ser.readline().decode().strip()
-                print(f"[ArduinoController] Arduino yanıtı: {response}")
-                return "OK" in response or "READY" in response
-            return False
-        except:
+                print(f"[ArduinoController] Arduino yanıtı: '{response}'")
+                return "OK" in response or "Ready" in response
+            else:
+                print("[ArduinoController] ❌ Arduino yanıt vermiyor")
+                return False
+        except Exception as e:
+            print(f"[ArduinoController] ❌ Test hatası: {e}")
             return False
 
     def disconnect(self):
-        if self.ser:
+        if self.ser and self.ser.is_open:
             self.ser.close()
             self.ser = None
 
-    def send_command(self, cmd: str, wait_response=True):
+    def send_command(self, cmd: str):
+        """Arduino'ya komut gönder ve yanıt al"""
         if self.ser and self.ser.is_open:
             try:
                 self.ser.write((cmd + "\n").encode())
                 self.ser.flush()
+                time.sleep(0.1)  # Arduino işlem süresi
                 
-                if wait_response:
-                    time.sleep(0.1)  # Arduino'nun işlem yapması için bekle
-                    if self.ser.in_waiting > 0:
-                        response = self.ser.readline().decode().strip()
-                        print(f"[ArduinoController] → {cmd} ← {response}")
-                        return True
-                return True
+                # Yanıt oku
+                if self.ser.in_waiting > 0:
+                    response = self.ser.readline().decode().strip()
+                    print(f"[Arduino] → {cmd} ← {response}")
+                    return response
+                return "OK"
             except Exception as e:
-                print(f"[ArduinoController] ❌ Komut hatası: {e}")
-                return False
+                print(f"[Arduino] ❌ Komut hatası: {e}")
+                return None
         else:
-            print("[ArduinoController] ❌ Bağlantı yok!")
-            return False
+            print("[Arduino] ❌ Bağlantı yok!")
+            return None
 
     def move_to_position(self, pan, tilt):
+        """Servo'ları belirtilen açılara hareket ettir"""
         self.current_pan = int(pan)
         self.current_tilt = int(tilt)
-        return self.send_command(f"MOVE,{self.current_pan},{self.current_tilt}")
+        response = self.send_command(f"MOVE,{self.current_pan},{self.current_tilt}")
+        return response == "Moved"
 
     def center_position(self):
+        """Servo'ları merkez pozisyona getir"""
         return self.move_to_position(90, 90)
 
     def enable_laser(self):
+        """Lazeri aç"""
         self.laser_active = True
-        return self.send_command("LASER,ON")
+        response = self.send_command("LASER,ON")
+        return response == "Laser ON"
 
     def disable_laser(self):
+        """Lazeri kapat"""
         self.laser_active = False
-        return self.send_command("LASER,OFF")
+        response = self.send_command("LASER,OFF")
+        return response == "Laser OFF"

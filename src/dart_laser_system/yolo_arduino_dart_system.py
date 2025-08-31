@@ -489,22 +489,27 @@ class YOLOArduinoDartSystem:
                 print("[YOLOArduinoSystem] ❌ Manuel hedefleme hatası")
     
     def aim_at_pixel_without_laser(self, pixel_x: int, pixel_y: int) -> bool:
-        """Piksele nişan al - LAZER AÇMADAN"""
+        """
+        🎯 Piksele nişan al - LAZER AÇMADAN
+        YENİ: YOLO verisi direkt Arduino'ya iletilir
+        """
         try:
+            print(f"[Hedefleme] 🎯 Hedefe kilitlenme başlatılıyor: ({pixel_x}, {pixel_y})")
+            
             # Simülatör kontrolü
             if isinstance(self.arduino_controller, ArduinoSimulator):
-                # Simülatör için sadece pozisyon değiştir, lazer açma
+                print("[Hedefleme] 🎮 Simülatör modu - eski yöntem kullanılıyor")
                 target_pan, target_tilt = self.arduino_controller.pixel_to_angle(
                     pixel_x, pixel_y, self.frame_width, self.frame_height)
                 return self.arduino_controller.move_to_position(target_pan, target_tilt)
             
-            # Gerçek Arduino kontrolü
+            # GERÇEKarduino kontrolü - YENİ YÖNTEM!
             else:
-                target_pan, target_tilt = self.pixel_to_servo_angle(pixel_x, pixel_y)
-                return self.arduino_controller.move_to_position(target_pan, target_tilt)
+                print("[Hedefleme] 🤖 Gerçek Arduino - YENİ YOLO→Arduino fonksiyonu kullanılıyor")
+                return self.send_yolo_data_to_arduino(pixel_x, pixel_y)
                 
         except Exception as e:
-            print(f"[YOLOArduinoSystem] Hedefleme hatası: {e}")
+            print(f"[YOLOArduinoSystem] 💥 Hedefleme hatası: {e}")
             return False
     
     def aim_at_pixel(self, pixel_x: int, pixel_y: int) -> bool:
@@ -551,6 +556,78 @@ class YOLOArduinoDartSystem:
         target_tilt = max(20, min(160, target_tilt))
         
         return target_pan, target_tilt
+    
+    def send_yolo_data_to_arduino(self, pixel_x: int, pixel_y: int) -> bool:
+        """
+        🎯 YOLO'dan alınan piksel koordinatlarını Arduino servo açılarına çevir ve gönder
+        
+        Args:
+            pixel_x: YOLO'dan gelen X koordinatı (0-frame_width)
+            pixel_y: YOLO'dan gelen Y koordinatı (0-frame_height)
+            
+        Returns:
+            bool: Arduino komutunun başarı durumu
+        """
+        try:
+            print(f"[YOLO→Arduino] 📡 YOLO verisi alındı: Piksel({pixel_x}, {pixel_y})")
+            
+            # Kamera merkezi hesapla
+            center_x = self.frame_width / 2   # Örn: 640/2 = 320
+            center_y = self.frame_height / 2  # Örn: 480/2 = 240
+            
+            # Piksel farkını hesapla (dartın merkeze göre konumu)
+            pixel_offset_x = pixel_x - center_x  # Sağda: +, Solda: -
+            pixel_offset_y = pixel_y - center_y  # Aşağıda: +, Yukarıda: -
+            
+            # Kamera FOV değerleri (kameranıza göre ayarlayın)
+            horizontal_fov = 60  # derece - yatay görüş açısı
+            vertical_fov = 45    # derece - dikey görüş açısı
+            
+            # Piksel farkını açıya çevir
+            pan_angle_offset = (pixel_offset_x / center_x) * (horizontal_fov / 2)
+            tilt_angle_offset = -(pixel_offset_y / center_y) * (vertical_fov / 2)  # Y eksen ters
+            
+            # MERKEZ REFERANSLİ servo açısı hesapla (sapma yapmaz!)
+            target_pan = 90 + pan_angle_offset   # Merkez (90°) + sapma
+            target_tilt = 90 + tilt_angle_offset # Merkez (90°) + sapma
+            
+            # Güvenlik sınırları
+            target_pan = max(10, min(170, target_pan))
+            target_tilt = max(20, min(160, target_tilt))
+            
+            # Hesaplama detayları yazdır
+            print(f"[YOLO→Arduino] 📊 Hesaplama:")
+            print(f"  ├─ Kamera merkezi: ({center_x}, {center_y})")
+            print(f"  ├─ Piksel offset: ({pixel_offset_x:+.1f}, {pixel_offset_y:+.1f})")
+            print(f"  ├─ Açı offset: Pan{pan_angle_offset:+.1f}°, Tilt{tilt_angle_offset:+.1f}°")
+            print(f"  └─ Servo hedef: Pan={target_pan:.1f}°, Tilt={target_tilt:.1f}°")
+            
+            # Arduino'ya servo komutunu gönder
+            success = self.arduino_controller.move_to_position(target_pan, target_tilt)
+            
+            if success:
+                print(f"[YOLO→Arduino] ✅ Arduino komutu başarılı: MOVE,{target_pan:.0f},{target_tilt:.0f}")
+                
+                # Menzil kontrolü (dart merkeze ne kadar yakın?)
+                distance_from_center = math.sqrt(pixel_offset_x**2 + pixel_offset_y**2)
+                print(f"[YOLO→Arduino] 📏 Merkez mesafesi: {distance_from_center:.1f} piksel")
+                
+                # Merkez yakınlık bilgisi
+                if distance_from_center <= 10:
+                    print(f"[YOLO→Arduino] 🎯 HEDEF MERKEZDE! Lazer aktif edilebilir.")
+                elif distance_from_center <= 30:
+                    print(f"[YOLO→Arduino] ⚡ Hedefe yakın, fine-tuning...")
+                else:
+                    print(f"[YOLO→Arduino] 🔄 Hedefe doğru hareket ediliyor...")
+                    
+                return True
+            else:
+                print(f"[YOLO→Arduino] ❌ Arduino komut hatası!")
+                return False
+                
+        except Exception as e:
+            print(f"[YOLO→Arduino] 💥 HATA: {e}")
+            return False
     
     def move_servo(self, pan_delta: float, tilt_delta: float):
         """Servo'yu relatif hareket ettir"""
