@@ -6,6 +6,7 @@ Gerçek dart tanıma sistemi ile Arduino kontrolü
 """
 import cv2
 import numpy as np
+import serial
 import time
 import math
 import os
@@ -14,7 +15,6 @@ from typing import Optional, Tuple, List
 
 # Mevcut modülleri import et
 from dart_detector import DartDetector
-from arduino_simulator import ArduinoSimulator
 
 try:
     from arduino_controller_fixed import ArduinoPanTiltController
@@ -71,8 +71,8 @@ class YOLOArduinoDartSystem:
         # Kamera
         self.camera_index = camera_index
         self.cap = None
-        self.frame_width = 640
-        self.frame_height = 480
+        self.frame_width = 1920
+        self.frame_height = 1080
         
         # Hedefleme durumu
         self.current_dart_target = None
@@ -86,6 +86,7 @@ class YOLOArduinoDartSystem:
         
         # Lazer durumu - BAŞLANGIÇTA KAPALI!
         self.laser_enabled_by_system = False
+        self.ensure_laser_off_at_startup() 
         
         print("[YOLOArduinoSystem] 🎮 Sistem hazır!")
         print("[YOLOArduinoSystem] ⚫ Lazer başlangıçta KAPALI - güvenlik önlemi")
@@ -130,26 +131,8 @@ class YOLOArduinoDartSystem:
                         arduino.disconnect()
                 except Exception:
                     continue
-            
-            print("[YOLOArduinoSystem] ❌ Gerçek Arduino bulunamadı!")
-            print("[YOLOArduinoSystem] ⚠️ Simülatör kullanmak istiyor musunuz? (Y/n)")
-            
-            # Kullanıcıdan onay al
-            try:
-                import sys
-                if sys.stdin.isatty():  # Terminal varsa kullanıcıdan sor
-                    response = input("Simülatör kullanılsın mı? (Y/n): ").strip().lower()
-                    if response in ['n', 'no', 'hayır']:
-                        print("[YOLOArduinoSystem] ❌ Gerçek Arduino bağlantısı zorunlu. Sistem durduruluyor.")
-                        return None
-                else:
-                    print("[YOLOArduinoSystem] ⚠️ Terminal yok, simülatör otomatik başlatılıyor")
-            except:
-                print("[YOLOArduinoSystem] ⚠️ Kullanıcı girişi alınamadı, simülatör başlatılıyor")
-        
-        # Simülatör kullan
-        print("[YOLOArduinoSystem] 🎮 Arduino Simulator başlatılıyor...")
-        return ArduinoSimulator()
+    
+        return ArduinoPanTiltController()
     
     def ensure_laser_off_at_startup(self):
         """Sistem başlangıcında lazeri kapalı yap"""
@@ -481,7 +464,7 @@ class YOLOArduinoDartSystem:
         """Piksele nişan al - LAZER AÇMADAN"""
         try:
             # Simülatör kontrolü
-            if isinstance(self.arduino_controller, ArduinoSimulator):
+            if isinstance(self.arduino_controller, ArduinoPanTiltController):
                 # Simülatör için sadece pozisyon değiştir, lazer açma
                 target_pan, target_tilt = self.arduino_controller.pixel_to_angle(
                     pixel_x, pixel_y, self.frame_width, self.frame_height)
@@ -529,8 +512,8 @@ class YOLOArduinoDartSystem:
         tilt_adjustment = -(offset_y / center_y) * (vertical_fov / 2)
         
         # Mevcut pozisyona ekle
-        current_pan = getattr(self.arduino_controller, 'current_pan', 90)
-        current_tilt = getattr(self.arduino_controller, 'current_tilt', 90)
+        current_pan = getattr(self.arduino_controller, 'current_pan', 0)
+        current_tilt = getattr(self.arduino_controller, 'current_tilt', 0)
         
         target_pan = current_pan + pan_adjustment
         target_tilt = current_tilt + tilt_adjustment
@@ -544,8 +527,8 @@ class YOLOArduinoDartSystem:
     def move_servo(self, pan_delta: float, tilt_delta: float):
         """Servo'yu relatif hareket ettir"""
         try:
-            current_pan = getattr(self.arduino_controller, 'current_pan', 90)
-            current_tilt = getattr(self.arduino_controller, 'current_tilt', 90)
+            current_pan = getattr(self.arduino_controller, 'current_pan', 0)
+            current_tilt = getattr(self.arduino_controller, 'current_tilt', 0)
             
             new_pan = max(10, min(170, current_pan + pan_delta))
             new_tilt = max(20, min(160, current_tilt + tilt_delta))
@@ -567,25 +550,27 @@ class YOLOArduinoDartSystem:
             return False
     
     def disable_laser(self) -> bool:
-        """Lazer kapat"""
-        try:
-            if hasattr(self.arduino_controller, 'disable_laser'):
-                return self.arduino_controller.disable_laser()
-            return True
-        except Exception as e:
-            print(f"[YOLOArduinoSystem] Lazer kapama hatası: {e}")
-            return False
+        """Arduino’ya lazeri kapat komutunu gönderir"""
+        if self.arduino_controller:
+            result = self.arduino_controller.disable_laser()  # Arduino’ya gönderim
+            self.laser_enabled_by_system = False  # Python tarafı güncellenir
+            return result
+        return False
+
     
     def center_position(self) -> bool:
         """Merkez pozisyona git"""
         try:
-            if hasattr(self.arduino_controller, 'center_position'):
-                return self.arduino_controller.center_position()
-            else:
-                return self.arduino_controller.move_to_position(90, 90)
+            print("[DEBUG] disable_laser çağrıldı")
+            if hasattr(self.arduino_controller, 'disable_laser'):
+                result = self.arduino_controller.disable_laser()
+                print(f"[DEBUG] Arduino disable_laser sonucu: {result}")
+                return result
+            return True
         except Exception as e:
-            print(f"[YOLOArduinoSystem] Merkez pozisyon hatası: {e}")
+            print(f"[YOLOArduinoSystem] Lazer kapama hatası: {e}")
             return False
+
     
     def draw_targeting_info(self, frame, detections, valid_detections, best_dart, current_time, fps, process_time):
         """Targeting bilgilerini çiz"""
@@ -699,8 +684,8 @@ class YOLOArduinoDartSystem:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
         
         # Sistem durumu
-        current_pan = getattr(self.arduino_controller, 'current_pan', 90)
-        current_tilt = getattr(self.arduino_controller, 'current_tilt', 90)
+        current_pan = getattr(self.arduino_controller, 'current_pan', 0)
+        current_tilt = getattr(self.arduino_controller, 'current_tilt', 0)
         laser_active = getattr(self.arduino_controller, 'laser_active', False)
         is_scanning = getattr(self.arduino_controller, 'is_scanning', False)
         target_locked = getattr(self.arduino_controller, 'target_locked', False)
@@ -763,7 +748,6 @@ class YOLOArduinoDartSystem:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
         
         return display_frame
-
 
 def main():
     """Ana program"""
