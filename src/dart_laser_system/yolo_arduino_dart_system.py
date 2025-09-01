@@ -16,10 +16,11 @@ from typing import Optional, Tuple, List
 # Mevcut modülleri import et
 from dart_detector import DartDetector
 
+# Arduino Controller Import - Basitleştirilmiş
 try:
-    from arduino_controller_fixed import ArduinoPanTiltController
+    from arduino_controller_simple import ArduinoPanTiltController
     ARDUINO_AVAILABLE = True
-    print("✅ Arduino Controller modülü yüklendi!")
+    print("✅ Arduino Controller (Simple) modülü yüklendi!")
 except ImportError:
     ARDUINO_AVAILABLE = False
     print("⚠️ Arduino Controller bulunamadı, simülatör kullanılacak")
@@ -53,8 +54,7 @@ class YOLOArduinoDartSystem:
                 param1=60,           # Canny edge threshold
                 param2=20,           # Accumulator threshold (daha hassas)
                 minDist_ratio=0.25,  # Daha yakın circle'lara izin ver
-                minRadius_ratio=0.08,
-                maxRadius_ratio=0.6
+                minRadius_ratio=0.08
             )
             print("[YOLOArduinoSystem] ✅ Dart Detector yüklendi (optimize edilmiş parametreler)")
             
@@ -64,6 +64,11 @@ class YOLOArduinoDartSystem:
         
         # Arduino Controller - Gerçek veya Simülatör
         self.arduino_controller = self.initialize_arduino()
+        
+        # EĞER ARDUINO BAĞLANAMAZSA SİSTEMİ DURDUR
+        if self.arduino_controller is None:
+            print("[YOLOArduinoSystem] ❌ Arduino bağlantısı başarısız! Sistem durduruluyor.")
+            raise Exception("Arduino bağlantısı zorunlu!")
         
         # BAŞLANGIÇTA LAZERİ KAPALI YÜKLÜYORUZ
         self.ensure_laser_off_at_startup()
@@ -97,39 +102,45 @@ class YOLOArduinoDartSystem:
             # Manuel port belirtilmişse önce onu dene
             if self.manual_arduino_port:
                 print(f"[YOLOArduinoSystem] 🎯 Manuel Arduino portu deneniyor: {self.manual_arduino_port}")
+                
+                # Windows'ta Linux path düzeltmesi
+                port_to_try = self.manual_arduino_port
+                if port_to_try == "/dev/ttyACM0" and sys.platform.startswith('win'):
+                    port_to_try = "COM7"  # Windows'ta muhtemel port
+                    print(f"[YOLOArduinoSystem] 🔧 Windows için port düzeltildi: {port_to_try}")
+                
                 try:
-                    arduino = ArduinoPanTiltController(port=self.manual_arduino_port, baud_rate=9600, timeout=5)
+                    arduino = ArduinoPanTiltController(port=port_to_try, baud_rate=9600, timeout=2)
                     if arduino.connect():
-                        print(f"[YOLOArduinoSystem] ✅ Manuel Arduino bağlandı: {self.manual_arduino_port}")
+                        print(f"[YOLOArduinoSystem] ✅ Manuel Arduino bağlandı: {port_to_try}")
                         return arduino
                     else:
                         arduino.disconnect()
-                        print(f"[YOLOArduinoSystem] ❌ Manuel port bağlantısı başarısız: {self.manual_arduino_port}")
+                        print(f"[YOLOArduinoSystem] ❌ Manuel port bağlantısı başarısız: {port_to_try}")
                 except Exception as e:
                     print(f"[YOLOArduinoSystem] ❌ Manuel port hatası: {e}")
             
-            # Otomatik port tarama
-            linux_ports = ['/dev/ttyACM0', '/dev/ttyUSB0', '/dev/ttyUSB1']
-            windows_ports = ['COM7', 'COM3', 'COM4', 'COM5', 'COM6', 'COM8']
-            
-            # İşletim sistemine göre port listesi seç
+            # Otomatik port tarama - İşletim sistemine göre
             import sys
             if sys.platform.startswith('linux'):
-                ports_to_try = linux_ports + windows_ports
+                ports_to_try = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyUSB0', '/dev/ttyUSB1']
             else:
-                ports_to_try = windows_ports + linux_ports
+                # Windows - gerçek USB portları öncelikli
+                ports_to_try = ['COM7', 'COM6', 'COM5', 'COM8', 'COM9', 'COM10']
             
             for port in ports_to_try:
                 try:
                     print(f"[YOLOArduinoSystem] 🔍 Arduino bağlantısı deneniyor: {port}")
-                    # Arduino Mega 9600 baud rate kullanıyor
-                    arduino = ArduinoPanTiltController(port=port, baud_rate=9600, timeout=5)
+                    # Arduino basit versiyonu - daha hızlı bağlantı
+                    arduino = ArduinoPanTiltController(port=port, baud_rate=9600, timeout=2)
                     if arduino.connect():
                         print(f"[YOLOArduinoSystem] ✅ Gerçek Arduino bağlandı: {port}")
                         return arduino
                     else:
+                        print(f"[YOLOArduinoSystem] ❌ Port yanıt vermiyor: {port}")
                         arduino.disconnect()
-                except Exception:
+                except Exception as e:
+                    print(f"[YOLOArduinoSystem] ❌ Port hatası {port}: {e}")
                     continue
     
         return ArduinoPanTiltController()
@@ -461,22 +472,28 @@ class YOLOArduinoDartSystem:
                 print("[YOLOArduinoSystem] ❌ Manuel hedefleme hatası")
     
     def aim_at_pixel_without_laser(self, pixel_x: int, pixel_y: int) -> bool:
-        """Piksele nişan al - LAZER AÇMADAN"""
+        """
+        🎯 Piksele nişan al - LAZER AÇMADAN
+        YENİ: YOLO verisi direkt Arduino'ya iletilir
+        """
         try:
+            print(f"[Hedefleme] 🎯 Hedefe kilitlenme başlatılıyor: ({pixel_x}, {pixel_y})")
+            
             # Simülatör kontrolü
             if isinstance(self.arduino_controller, ArduinoPanTiltController):
                 # Simülatör için sadece pozisyon değiştir, lazer açma
+
                 target_pan, target_tilt = self.arduino_controller.pixel_to_angle(
                     pixel_x, pixel_y, self.frame_width, self.frame_height)
                 return self.arduino_controller.move_to_position(target_pan, target_tilt)
             
-            # Gerçek Arduino kontrolü
+            # GERÇEKarduino kontrolü - YENİ YÖNTEM!
             else:
-                target_pan, target_tilt = self.pixel_to_servo_angle(pixel_x, pixel_y)
-                return self.arduino_controller.move_to_position(target_pan, target_tilt)
+                print("[Hedefleme] 🤖 Gerçek Arduino - YENİ YOLO→Arduino fonksiyonu kullanılıyor")
+                return self.send_yolo_data_to_arduino(pixel_x, pixel_y)
                 
         except Exception as e:
-            print(f"[YOLOArduinoSystem] Hedefleme hatası: {e}")
+            print(f"[YOLOArduinoSystem] 💥 Hedefleme hatası: {e}")
             return False
     
     def aim_at_pixel(self, pixel_x: int, pixel_y: int) -> bool:
@@ -494,35 +511,106 @@ class YOLOArduinoDartSystem:
             return False
     
     def pixel_to_servo_angle(self, pixel_x: int, pixel_y: int) -> Tuple[float, float]:
-        """Piksel koordinatlarını servo açılarına çevir"""
+        """Piksel koordinatlarını servo açılarına çevir - ABSOLUTE pozisyon"""
         # Kamera merkezi
-        center_x = self.frame_width / 2
-        center_y = self.frame_height / 2
+        center_x = self.frame_width / 2  # 320
+        center_y = self.frame_height / 2  # 240
         
-        # Offset hesapla
+        # Offset hesapla (piksel farkı)
         offset_x = pixel_x - center_x
         offset_y = pixel_y - center_y
         
-        # Kamera FOV (60° yatay, 45° dikey)
-        horizontal_fov = 60
-        vertical_fov = 45
+        # Kamera FOV - daha gerçekçi değerler
+        horizontal_fov = 50  # Derece
+        vertical_fov = 40    # Derece
         
-        # Açı hesapla
-        pan_adjustment = (offset_x / center_x) * (horizontal_fov / 2)
-        tilt_adjustment = -(offset_y / center_y) * (vertical_fov / 2)
+        # Piksel başına açı
+        degrees_per_pixel_x = horizontal_fov / self.frame_width
+        degrees_per_pixel_y = vertical_fov / self.frame_height
         
         # Mevcut pozisyona ekle
         current_pan = getattr(self.arduino_controller, 'current_pan', 0)
         current_tilt = getattr(self.arduino_controller, 'current_tilt', 0)
-        
-        target_pan = current_pan + pan_adjustment
-        target_tilt = current_tilt + tilt_adjustment
+
+        print(f"[YOLOArduinoSystem] 🎯 Pixel({pixel_x},{pixel_y}) -> Servo({target_pan:.1f}°, {target_tilt:.1f}°)")
         
         # Sınırları kontrol et
         target_pan = max(10, min(170, target_pan))
         target_tilt = max(20, min(160, target_tilt))
         
         return target_pan, target_tilt
+    
+    def send_yolo_data_to_arduino(self, pixel_x: int, pixel_y: int) -> bool:
+        """
+        🎯 YOLO'dan alınan piksel koordinatlarını Arduino servo açılarına çevir ve gönder
+        
+        Args:
+            pixel_x: YOLO'dan gelen X koordinatı (0-frame_width)
+            pixel_y: YOLO'dan gelen Y koordinatı (0-frame_height)
+            
+        Returns:
+            bool: Arduino komutunun başarı durumu
+        """
+        try:
+            print(f"[YOLO→Arduino] 📡 YOLO verisi alındı: Piksel({pixel_x}, {pixel_y})")
+            
+            # Kamera merkezi hesapla
+            center_x = self.frame_width / 2   # Örn: 640/2 = 320
+            center_y = self.frame_height / 2  # Örn: 480/2 = 240
+            
+            # Piksel farkını hesapla (dartın merkeze göre konumu)
+            pixel_offset_x = pixel_x - center_x  # Sağda: +, Solda: -
+            pixel_offset_y = pixel_y - center_y  # Aşağıda: +, Yukarıda: -
+            
+            # Kamera FOV değerleri (kameranıza göre ayarlayın)
+            horizontal_fov = 60  # derece - yatay görüş açısı
+            vertical_fov = 45    # derece - dikey görüş açısı
+            
+            # Piksel farkını açıya çevir
+            pan_angle_offset = (pixel_offset_x / center_x) * (horizontal_fov / 2)
+            tilt_angle_offset = -(pixel_offset_y / center_y) * (vertical_fov / 2)  # Y eksen ters
+            
+            # MERKEZ REFERANSLİ servo açısı hesapla (sapma yapmaz!)
+            target_pan = 90 + pan_angle_offset   # Merkez (90°) + sapma
+            target_tilt = 90 + tilt_angle_offset # Merkez (90°) + sapma
+            
+            # Güvenlik sınırları
+            target_pan = max(10, min(170, target_pan))
+            target_tilt = max(20, min(160, target_tilt))
+            
+            # Hesaplama detayları yazdır
+            print(f"[YOLO→Arduino] 📊 Hesaplama:")
+            print(f"  ├─ Kamera merkezi: ({center_x}, {center_y})")
+            print(f"  ├─ Piksel offset: ({pixel_offset_x:+.1f}, {pixel_offset_y:+.1f})")
+            print(f"  ├─ Açı offset: Pan{pan_angle_offset:+.1f}°, Tilt{tilt_angle_offset:+.1f}°")
+            print(f"  └─ Servo hedef: Pan={target_pan:.1f}°, Tilt={target_tilt:.1f}°")
+            
+            # Arduino'ya servo komutunu gönder
+            success = self.arduino_controller.move_to_position(target_pan, target_tilt)
+            
+            if success:
+                print(f"[YOLO→Arduino] ✅ Arduino komutu başarılı: MOVE,{target_pan:.0f},{target_tilt:.0f}")
+                
+                # Menzil kontrolü (dart merkeze ne kadar yakın?)
+                distance_from_center = math.sqrt(pixel_offset_x**2 + pixel_offset_y**2)
+                print(f"[YOLO→Arduino] 📏 Merkez mesafesi: {distance_from_center:.1f} piksel")
+                
+                # Merkez yakınlık bilgisi
+                if distance_from_center <= 10:
+                    print(f"[YOLO→Arduino] 🎯 HEDEF MERKEZDE! Lazer aktif edilebilir.")
+                elif distance_from_center <= 30:
+                    print(f"[YOLO→Arduino] ⚡ Hedefe yakın, fine-tuning...")
+                else:
+                    print(f"[YOLO→Arduino] 🔄 Hedefe doğru hareket ediliyor...")
+                    
+                return True
+            else:
+                print(f"[YOLO→Arduino] ❌ Arduino komut hatası!")
+                return False
+                
+        except Exception as e:
+            print(f"[YOLO→Arduino] 💥 HATA: {e}")
+            return False
     
     def move_servo(self, pan_delta: float, tilt_delta: float):
         """Servo'yu relatif hareket ettir"""
