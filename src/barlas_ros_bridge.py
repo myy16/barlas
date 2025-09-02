@@ -8,6 +8,7 @@ import rospy
 from std_msgs.msg import String, Bool, Float32MultiArray
 from geometry_msgs.msg import Twist, Point, PointStamped
 from sensor_msgs.msg import Image, LaserScan, Imu
+from nav_msgs.msg import Odometry
 from mavros_msgs.msg import State, OverrideRCIn
 from mavros_msgs.srv import CommandBool, SetMode
 
@@ -15,6 +16,7 @@ import threading
 import json
 import serial
 import time
+import math
 
 class BARLASROSBridge:
     """
@@ -59,6 +61,15 @@ class BARLASROSBridge:
         self.sensor_data_sub = rospy.Subscriber('/barlas/sensors/all_data', String, self.sensor_data_callback)
         self.ultrasonic_sub = rospy.Subscriber('/barlas/sensors/ultrasonic', LaserScan, self.ultrasonic_callback)
         self.imu_sub = rospy.Subscriber('/barlas/sensors/imu', Imu, self.imu_callback)
+        
+        # === Encoder Entegrasyonu ===
+        # Arduino encoder verileri
+        self.encoder_sub = rospy.Subscriber('/barlas/encoders/raw', Float32MultiArray, self.encoder_callback)
+        self.odom_sub = rospy.Subscriber('/barlas/odom', Odometry, self.odometry_callback)
+        
+        # Encoder durumu
+        self.current_encoders = {'left': 0, 'right': 0}
+        self.current_odom = None
         
         # === Obstacle Avoidance ===
         self.obstacle_avoidance_pub = rospy.Publisher('/barlas/navigation/cmd_vel', Twist, queue_size=1)
@@ -107,6 +118,44 @@ class BARLASROSBridge:
                 self.process_obstacle_avoidance()
         except Exception as e:
             rospy.logwarn(f"Sensör veri çözümleme hatası: {e}")
+    
+    def encoder_callback(self, msg):
+        """Arduino encoder verileri callback"""
+        try:
+            if len(msg.data) >= 2:
+                self.current_encoders['left'] = msg.data[0]
+                self.current_encoders['right'] = msg.data[1]
+                
+                # Debug (her 5 saniyede bir)
+                if int(rospy.Time.now().to_sec()) % 5 == 0:
+                    rospy.logdebug(f"📊 [Encoder] Sol:{self.current_encoders['left']:.0f}, Sağ:{self.current_encoders['right']:.0f}")
+        except Exception as e:
+            rospy.logwarn(f"Encoder veri çözümleme hatası: {e}")
+    
+    def odometry_callback(self, msg):
+        """Robot odometry callback"""
+        try:
+            self.current_odom = msg
+            
+            # Pozisyon bilgilerini al
+            x = msg.pose.pose.position.x
+            y = msg.pose.pose.position.y
+            
+            # Yaw açısını quaternion'dan çıkar
+            import tf2_ros
+            from tf2_geometry_msgs import do_transform_pose
+            # Basit euler açısı hesapla
+            orientation = msg.pose.pose.orientation
+            siny_cosp = 2 * (orientation.w * orientation.z + orientation.x * orientation.y)
+            cosy_cosp = 1 - 2 * (orientation.y * orientation.y + orientation.z * orientation.z)
+            yaw = math.atan2(siny_cosp, cosy_cosp)
+            
+            # Debug (her 2 saniyede bir)
+            if int(rospy.Time.now().to_sec()) % 2 == 0:
+                rospy.logdebug(f"🗺️ [Odom] Pos:({x:.2f},{y:.2f}) Yaw:{math.degrees(yaw):.1f}°")
+                
+        except Exception as e:
+            rospy.logwarn(f"Odometry veri çözümleme hatası: {e}")
     
     def ultrasonic_callback(self, msg):
         """8x ultrasonik sensör verisi"""
@@ -230,8 +279,22 @@ class BARLASROSBridge:
             'armed': self.mavros_armed,
             'mode': self.current_mode,
             'dart_targeting': self.dart_targeting_active,
-            'obstacle_avoidance': self.obstacle_avoidance_active
+            'obstacle_avoidance': self.obstacle_avoidance_active,
+            'encoders': self.current_encoders,
+            'odom_available': self.current_odom is not None
         }
+        
+        # Odometry bilgisi varsa ekle
+        if self.current_odom:
+            status['position'] = {
+                'x': self.current_odom.pose.pose.position.x,
+                'y': self.current_odom.pose.pose.position.y,
+                'z': self.current_odom.pose.pose.position.z
+            }
+            status['velocity'] = {
+                'linear_x': self.current_odom.twist.twist.linear.x,
+                'angular_z': self.current_odom.twist.twist.angular.z
+            }
         
         status_msg = String()
         status_msg.data = json.dumps(status)

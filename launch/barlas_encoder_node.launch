@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!--
+BARLAS Encoder ROS Launch File
+Arduino encoder verilerini ROS topic'lere aktaran node başlatır
+-->
+<launch>
+
+    <!-- BARLAS Encoder Node -->
+    <node pkg="barlas" type="barlas_encoder_ros_node.py" name="barlas_encoder_node" output="screen">
+
+        <!-- Arduino Port (otomatik tespit için boş bırak) -->
+        <param name="arduino_port" value="" />
+
+        <!-- Robot Fiziksel Parametreleri -->
+        <param name="wheel_base" value="0.52" />
+        <!-- Tekerlek arası mesafe (metre) -->
+        <param name="wheel_diameter" value="0.20" />
+        <!-- Tekerlek çapı (metre) -->
+        <param name="encoder_resolution" value="1400" />
+        <!-- Encoder pulse/revolution -->
+
+        <!-- ROS Parametreleri -->
+        <param name="publish_rate" value="20" />
+        <!-- Publish frequency (Hz) -->
+        <param name="tf_publish" value="true" />
+        <!-- TF transform yayınla -->
+        <param name="debug_output" value="false" />
+        <!-- Debug mesajları -->
+
+        <!-- Node yaşam döngüsü -->
+        <param name="respawn" value="true" />
+        <param name="respawn_delay" value="5" />
+
+    </node>
+
+    <!-- Static TF - base_link'ten sensörlere -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base_to_laser" args="0.15 0 0.1 0 0 0 base_link base_laser" />
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base_to_imu" args="0 0 0.05 0 0 0 base_link base_imu" />
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base_to_camera" args="0.20 0 0.15 0 0 0 base_link base_camera" />
+
+    <!-- Opsiyonel: Robot State Publisher (URDF varsa) -->
+    <!--
+    <param name="robot_description" textfile="$(find barlas)/urdf/barlas_robot.urdf" />
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+        <param name="publish_frequency" value="30" />
+    </node>
+    -->
+
+    <!-- RQT Monitor (opsiyonel) -->
+    <node pkg="rqt_plot" type="rqt_plot" name="encoder_plot" args="/barlas/encoders/raw/data[0]:data[1]" if="$(arg plot_encoders:=false)" />
+
+</launch>

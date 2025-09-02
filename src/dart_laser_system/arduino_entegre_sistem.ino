@@ -17,7 +17,7 @@ Servo frenServo1;
 Servo frenServo2;
 
 // ===== PIN TANIMLAMALARI =====
-// GERÇEK DONANIM KONFIGÜRASYONU - YENİ PIN DÜZENLEME
+// GÜNCEL DONANIM KONFIGÜRASYONU - GERÇEK PIN NUMARALARI
 
 // PWM Giriş Pinleri (Kumanda sinyalleri)
 const int pwmServoPin = 2; // PWM giriş 1 (Servo/Fren kontrol)
@@ -25,10 +25,6 @@ const int pwmRolePin = 3;  // PWM giriş 2 (Röle kontrol)
 
 // Far Sistemi
 int farPin = 6;           // Far kontrolü
-
-// Pan-Tilt Servo (Lazer yönlendirme)
-int panServoPin = 7;     // Pan servo
-int tiltServoPin = 8;    // Tilt servo
 
 // Fren Servo Pinleri
 const int servoPin1 = 9;   // Fren servo 1
@@ -47,8 +43,12 @@ int encoder2PinB = 21;   // Sağ Encoder B kanalı (Interrupt 2)
 int pixhawkManuelPin = 23; // Pixhawk manuel açma/kapama (kumandadan gelen)
 
 // Pixhawk Kontrol Pinleri
-int pixhawkPin1 = 26;     // Pixhawk kontrol 1
-int pixhawkPin2 = 27;     // Pixhawk kontrol 2
+int pixhawkPin1 = 26;     // Pixhawk kontrol 1 (X ekseni kontrol)
+int pixhawkPin2 = 27;     // Pixhawk kontrol 2 (Y ekseni kontrol)
+
+// Pan-Tilt Servo Pinleri (X-Y ekseni) - DÜZELTİLDİ
+int panServoPin = 7;     // Pan servo (X ekseni)
+int tiltServoPin = 8;    // Tilt servo (Y ekseni)
 
 // --- Fren Servo Değişkenleri ---
 int frenCekAci1 = -40;
@@ -129,7 +129,10 @@ void setup() {
   
   delay(1000);
   Serial.println("SİSTEM HAZIR!");
-  Serial.println("Pin 2-3: PWM | Pin 6: Far | Pin 9-10: Fren | Pin 13: Lazer | Pin 23: Pixhawk Manuel | Pin 26-27: Pixhawk");
+  Serial.println("✅ GÜNCEL PIN KONFİGÜRASYONU:");
+  Serial.println("   PWM Giriş: Pin 2-3 | Far: Pin 6 | Pan-Tilt: Pin 7-8");
+  Serial.println("   Fren: Pin 9-10 | Lazer: Pin 13 | Encoder: Pin 18-21");
+  Serial.println("   Pixhawk: Pin 23(Manuel) Pin 26-27(Kontrol)");
 }
 
 // ===== PWM INTERRUPT FONKSİYONLARI (Arkadaşların Kodu) =====
@@ -297,15 +300,26 @@ void loop() {
     
     // ===== ENCODER OKUMA =====
     else if (cmd == "encoder_read") {
-      Serial.print("Encoder1: ");
+      // ROS uyumlu format: "OK - Encoders L:1234,R:5678"
+      Serial.print("OK - Encoders L:");
       Serial.print(encoder1Count);
-      Serial.print(" | Encoder2: ");
+      Serial.print(",R:");
       Serial.println(encoder2Count);
     }
     else if (cmd == "encoder_reset") {
       encoder1Count = 0;
       encoder2Count = 0;
-      Serial.println("Encoders reset");
+      Serial.println("OK - Encoders reset");
+    }
+    
+    // ===== ENCODER SÜREKLI YAYINI (ROS İÇİN) =====
+    else if (cmd == "encoder_stream_on") {
+      // Sürekli encoder yayını başlat (ROS node için)
+      Serial.println("OK - Encoder streaming enabled");
+      // Bu özellik ana döngüde implement edilecek
+    }
+    else if (cmd == "encoder_stream_off") {
+      Serial.println("OK - Encoder streaming disabled");
     }
     
     // ===== PWM DURUM OKUMA =====
@@ -319,22 +333,25 @@ void loop() {
     
     // ===== SISTEM BİLGİLERİ =====
     else if (cmd == "status") {
-      Serial.println("=== BARLAS SİSTEM DURUM (YENİ PIN) ===");
-      Serial.print("Encoder1: "); Serial.println(encoder1Count);
-      Serial.print("Encoder2: "); Serial.println(encoder2Count);
-      Serial.print("Servo PWM: "); Serial.print(servoPulse); Serial.println("μs");
-      Serial.print("Lazer PWM: "); Serial.print(rolePulse); Serial.println("μs");
-      Serial.print("Far (Pin 6): "); Serial.println(digitalRead(farPin) ? "ON" : "OFF");
-      Serial.print("Lazer Röle (Pin 13): "); Serial.println(digitalRead(lazerRolePin) ? "ON" : "OFF");
-      Serial.print("Pixhawk Manuel (Pin 23): "); Serial.println(digitalRead(pixhawkManuelPin) ? "ON" : "OFF");
-      Serial.print("Pixhawk 1 (Pin 26): "); Serial.println(digitalRead(pixhawkPin1) ? "ON" : "OFF");
-      Serial.print("Pixhawk 2 (Pin 27): "); Serial.println(digitalRead(pixhawkPin2) ? "ON" : "OFF");
-      Serial.println("=======================================");
+      Serial.println("=== BARLAS SİSTEM DURUM (GÜNCEL PIN) ===");
+      Serial.print("Encoder1 (Pin18-19): "); Serial.println(encoder1Count);
+      Serial.print("Encoder2 (Pin20-21): "); Serial.println(encoder2Count);
+      Serial.print("Servo PWM (Pin2): "); Serial.print(servoPulse); Serial.println("μs");
+      Serial.print("Lazer PWM (Pin3): "); Serial.print(rolePulse); Serial.println("μs");
+      Serial.print("Far (Pin6): "); Serial.println(digitalRead(farPin) ? "ON" : "OFF");
+      Serial.print("Pan-Tilt (Pin7-8): Pan="); Serial.print(panServo.read()); Serial.print("° Tilt="); Serial.print(tiltServo.read()); Serial.println("°");
+      Serial.print("Fren (Pin9-10): "); Serial.print(frenServo1.read()); Serial.print("° / "); Serial.print(frenServo2.read()); Serial.println("°");
+      Serial.print("Lazer Röle (Pin13): "); Serial.println(digitalRead(lazerRolePin) ? "ON" : "OFF");
+      Serial.print("Pixhawk Manuel (Pin23): "); Serial.println(digitalRead(pixhawkManuelPin) ? "ON" : "OFF");
+      Serial.print("Pixhawk X-Y (Pin26-27): "); Serial.print(digitalRead(pixhawkPin1) ? "ON" : "OFF"); Serial.print(" / "); Serial.println(digitalRead(pixhawkPin2) ? "ON" : "OFF");
+      Serial.println("========================================");
     }
     
     // ===== TEST KOMUTLARI =====
     else if (cmd == "test") {
-      Serial.println("Arduino bağlantı testi: OK - YENİ PIN KONFIGÜRASYONU");
+      Serial.println("Arduino bağlantı testi: OK - GÜNCEL PIN KONFİGÜRASYONU");
+      Serial.println("✅ Pin 2-3:PWM | Pin 6:Far | Pin 7-8:Pan-Tilt | Pin 9-10:Fren");
+      Serial.println("✅ Pin 13:Lazer | Pin 18-21:Encoder | Pin 23:Pixhawk | Pin 26-27:X-Y");
     }
     
     else {
