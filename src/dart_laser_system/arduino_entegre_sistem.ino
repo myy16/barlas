@@ -181,7 +181,123 @@ void updateEncoder2() {
   if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) encoder2Count--;
 }
 
+// ===== PIN DURUM KONTROL SİSTEMİ =====
+
+void checkPixhawkPinStates() {
+  """Pin 23 Pixhawk manuel kontrol durumu"""
+  static bool lastPixhawkState = false;
+  static unsigned long lastCheckTime = 0;
+  
+  // Her 100ms kontrol et (debouncing için)
+  if (millis() - lastCheckTime > 100) {
+    bool currentState = digitalRead(pixhawkManuelPin);
+    
+    if (currentState && !lastPixhawkState) {
+      // Pin 23 HIGH oldu - Pixhawk aktif
+      executePixhawkActivateFunction();
+    } else if (!currentState && lastPixhawkState) {
+      // Pin 23 LOW oldu - Pixhawk pasif
+      executePixhawkDeactivateFunction();
+    }
+    
+    lastPixhawkState = currentState;
+    lastCheckTime = millis();
+  }
+}
+
+// ===== MODÜLER FONKSİYONLAR =====
+
+void executeBrakeFunction() {
+  """Fren uygula fonksiyonu - char b işlevi"""
+  frenServo1.write(servoOffset1);
+  frenServo2.write(servoOffset2);
+  Serial.println("[AUTO] Fren uygulandı");
+}
+
+void executeReleaseFunction() {
+  """Fren bırak fonksiyonu - char r işlevi"""
+  frenServo1.write(90);
+  frenServo2.write(90);
+  Serial.println("[AUTO] Fren bırakıldı");
+}
+
+void executeLaserOnFunction() {
+  """Lazer aç fonksiyonu - char l işlevi"""
+  digitalWrite(lazerRolePin, HIGH);
+  Serial.println("[AUTO] Lazer röle açıldı");
+}
+
+void executeLaserOffFunction() {
+  """Lazer kapat fonksiyonu - char o işlevi"""
+  digitalWrite(lazerRolePin, LOW);
+  Serial.println("[AUTO] Lazer röle kapatıldı");
+}
+
+void executePixhawkActivateFunction() {
+  """Pin 23 aktif - char c işlevi"""
+  pixhawkActive = true;
+  controlMode = "PIXHAWK";
+  Serial.println("[PIN23] Pixhawk modu aktif!");
+  Serial.println("[PIN23] Otomatik mod başladı");
+  
+  // Pixhawk modunda yapılacak işlemler
+  enableAutoPilot();
+}
+
+void executePixhawkDeactivateFunction() {
+  """Pin 23 pasif - char d işlevi"""
+  pixhawkActive = false;
+  controlMode = "SERIAL";
+  Serial.println("[PIN23] Pixhawk modu pasif");
+  Serial.println("[PIN23] Manuel mod başladı");
+  
+  // Manuel moda geçiş işlemleri
+  disableAutoPilot();
+}
+
+void enableAutoPilot() {
+  """Otopilot aktif"""
+  digitalWrite(pixhawkPin1, HIGH);  // Pin 26
+  digitalWrite(pixhawkPin2, HIGH);  // Pin 27
+  Serial.println("[AUTOPILOT] X-Y kontrol aktif");
+}
+
+void disableAutoPilot() {
+  """Otopilot pasif"""
+  digitalWrite(pixhawkPin1, LOW);   // Pin 26
+  digitalWrite(pixhawkPin2, LOW);   // Pin 27
+  Serial.println("[AUTOPILOT] Manuel kontrol aktif");
+}
+
+void executeStatusFunction() {
+  """Status komutu - char s işlevi"""
+  Serial.println("=== BARLAS SİSTEM DURUM (GÜNCEL PIN) ===");
+  Serial.print("Encoder1 (Pin18-19): "); Serial.println(encoder1Count);
+  Serial.print("Encoder2 (Pin20-21): "); Serial.println(encoder2Count);
+  Serial.print("Servo PWM (Pin2): "); Serial.print(servoPulse); Serial.println("μs");
+  Serial.print("Lazer PWM (Pin3): "); Serial.print(rolePulse); Serial.println("μs");
+  Serial.print("Far (Pin6): "); Serial.println(digitalRead(farPin) ? "ON" : "OFF");
+  Serial.print("Pan-Tilt (Pin7-8): Pan="); Serial.print(panServo.read()); Serial.print("° Tilt="); Serial.print(tiltServo.read()); Serial.println("°");
+  Serial.print("Fren (Pin9-10): "); Serial.print(frenServo1.read()); Serial.print("° / "); Serial.print(frenServo2.read()); Serial.println("°");
+  Serial.print("Lazer Röle (Pin13): "); Serial.println(digitalRead(lazerRolePin) ? "ON" : "OFF");
+  Serial.print("Pixhawk Manuel (Pin23): "); Serial.println(digitalRead(pixhawkManuelPin) ? "ON" : "OFF");
+  Serial.print("Pixhawk X-Y (Pin26-27): "); Serial.print(digitalRead(pixhawkPin1) ? "ON" : "OFF"); Serial.print(" / "); Serial.println(digitalRead(pixhawkPin2) ? "ON" : "OFF");
+  Serial.print("Kontrol Modu: "); Serial.println(controlMode);
+  Serial.println("========================================");
+}
+
+void executeTestFunction() {
+  """Test komutu - char t işlevi"""
+  Serial.println("Arduino bağlantı testi: OK - GÜNCEL PIN KONFİGÜRASYONU");
+  Serial.println("✅ Pin 2-3:PWM | Pin 6:Far | Pin 7-8:Pan-Tilt | Pin 9-10:Fren");
+  Serial.println("✅ Pin 13:Lazer | Pin 18-21:Encoder | Pin 23:Pixhawk | Pin 26-27:X-Y");
+  Serial.println("🎮 Char Komutlar: b=fren, r=bırak, l=lazer_on, o=lazer_off, c=pixhawk_on, d=pixhawk_off, f=far_on, g=far_off, s=status, t=test");
+}
+
 void loop() {
+  // === PIN DURUM KONTROLÜ SİSTEMİ ===
+  checkPixhawkPinStates();
+  
   // === PWM OKUMA VE FİLTRELEME ===
   static unsigned long lastServoTime = 0;
   static unsigned long lastRoleTime = 0;
@@ -195,18 +311,16 @@ void loop() {
       
       // Fren servo kontrolü
       if (servoAngle < 85) { // Fren uygula
-        frenServo1.write(servoOffset1);
-        frenServo2.write(servoOffset2);
+        executeBrakeFunction();
       } else if (servoAngle > 95) { // Fren bırak
-        frenServo1.write(90);
-        frenServo2.write(90);
+        executeReleaseFunction();
       }
       // 85-95 arası nötr bölge - değişiklik yapma
     }
     lastServoTime = millis();
   }
   
-  // Röle PWM oku (her 50ms) - Artık lazer röle kontrolü
+  // Röle PWM oku (her 50ms) - Lazer röle kontrolü
   if (millis() - lastRoleTime > 50) {
     unsigned long pulseWidth = rolePulse; // Atom değer okuma
     
@@ -214,9 +328,9 @@ void loop() {
       int roleValue = map(pulseWidth, 1000, 2000, 0, 180);
       
       if (roleValue > 90) {
-        digitalWrite(lazerRolePin, HIGH); // Lazer röle aç
+        executeLaserOnFunction();
       } else {
-        digitalWrite(lazerRolePin, LOW);  // Lazer röle kapat
+        executeLaserOffFunction();
       }
     }
     lastRoleTime = millis();
@@ -227,8 +341,50 @@ void loop() {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
 
+    // ===== TEK KARAKTER KOMUTLAR (MODÜLER SİSTEM) =====
+    if (cmd.length() == 1) {
+      char c = cmd.charAt(0);
+      switch(c) {
+        case 'b':  // Brake
+          executeBrakeFunction();
+          break;
+        case 'r':  // Release
+          executeReleaseFunction();
+          break;
+        case 'l':  // Laser on
+          executeLaserOnFunction();
+          break;
+        case 'o':  // Laser off
+          executeLaserOffFunction();
+          break;
+        case 'c':  // Activate (Pixhawk manuel)
+          executePixhawkActivateFunction();
+          break;
+        case 'd':  // Deactivate (Pixhawk pasif)
+          executePixhawkDeactivateFunction();
+          break;
+        case 'f':  // Far on
+          digitalWrite(farPin, HIGH);
+          Serial.println("[CHAR] Far açıldı");
+          break;
+        case 'g':  // Far off (f'den sonraki harf)
+          digitalWrite(farPin, LOW);
+          Serial.println("[CHAR] Far kapatıldı");
+          break;
+        case 's':  // Status
+          executeStatusFunction();
+          break;
+        case 't':  // Test
+          executeTestFunction();
+          break;
+        default:
+          Serial.println("Bilinmeyen char komut: " + cmd);
+          break;
+      }
+    }
+    
     // ===== PAN-TILT KOMUTLARI =====
-    if (cmd.startsWith("MOVE")) {
+    else if (cmd.startsWith("MOVE")) {
       int comma1 = cmd.indexOf(',');
       int comma2 = cmd.lastIndexOf(',');
       int pan = cmd.substring(comma1 + 1, comma2).toInt();
@@ -240,18 +396,17 @@ void loop() {
     
     // ===== LAZER KOMUTLARI =====
     else if (cmd == "LASER,ON" || cmd == "lazer_on") {
-      digitalWrite(lazerRolePin, HIGH); // Pin 13
-      Serial.println("Lazer röle ON");
+      executeLaserOnFunction(); // Modüler fonksiyon çağrısı
     }
     else if (cmd == "LASER,OFF" || cmd == "lazer_off") {
-      digitalWrite(lazerRolePin, LOW);  // Pin 13
-      Serial.println("Lazer röle OFF");
+      executeLaserOffFunction(); // Modüler fonksiyon çağrısı
     }
     
     // ===== FAR KOMUTLARI =====
     else if (cmd == "far_on") {
       digitalWrite(farPin, HIGH);       // Pin 6
       farActive = true;
+      Serial.println("[CMD] Far açıldı");
       Serial.println("Far açıldı");
     }
     else if (cmd == "far_off") {
@@ -262,14 +417,10 @@ void loop() {
     
     // ===== MANUEL FREN KOMUTLARI =====
     else if (cmd == "fren_uygula") {
-      frenServo1.write(servoOffset1);   // Pin 9
-      frenServo2.write(servoOffset2);   // Pin 10
-      Serial.println("Manuel fren uygulandı");
+      executeBrakeFunction(); // Modüler fonksiyon çağrısı
     }
     else if (cmd == "fren_birak") {
-      frenServo1.write(90);             // Pin 9
-      frenServo2.write(90);             // Pin 10
-      Serial.println("Manuel fren bırakıldı");
+      executeReleaseFunction(); // Modüler fonksiyon çağrısı
     }
     
     // ===== PIXHAWK KOMUTLARI =====
@@ -333,25 +484,12 @@ void loop() {
     
     // ===== SISTEM BİLGİLERİ =====
     else if (cmd == "status") {
-      Serial.println("=== BARLAS SİSTEM DURUM (GÜNCEL PIN) ===");
-      Serial.print("Encoder1 (Pin18-19): "); Serial.println(encoder1Count);
-      Serial.print("Encoder2 (Pin20-21): "); Serial.println(encoder2Count);
-      Serial.print("Servo PWM (Pin2): "); Serial.print(servoPulse); Serial.println("μs");
-      Serial.print("Lazer PWM (Pin3): "); Serial.print(rolePulse); Serial.println("μs");
-      Serial.print("Far (Pin6): "); Serial.println(digitalRead(farPin) ? "ON" : "OFF");
-      Serial.print("Pan-Tilt (Pin7-8): Pan="); Serial.print(panServo.read()); Serial.print("° Tilt="); Serial.print(tiltServo.read()); Serial.println("°");
-      Serial.print("Fren (Pin9-10): "); Serial.print(frenServo1.read()); Serial.print("° / "); Serial.print(frenServo2.read()); Serial.println("°");
-      Serial.print("Lazer Röle (Pin13): "); Serial.println(digitalRead(lazerRolePin) ? "ON" : "OFF");
-      Serial.print("Pixhawk Manuel (Pin23): "); Serial.println(digitalRead(pixhawkManuelPin) ? "ON" : "OFF");
-      Serial.print("Pixhawk X-Y (Pin26-27): "); Serial.print(digitalRead(pixhawkPin1) ? "ON" : "OFF"); Serial.print(" / "); Serial.println(digitalRead(pixhawkPin2) ? "ON" : "OFF");
-      Serial.println("========================================");
+      executeStatusFunction(); // Modüler fonksiyon çağrısı
     }
     
     // ===== TEST KOMUTLARI =====
     else if (cmd == "test") {
-      Serial.println("Arduino bağlantı testi: OK - GÜNCEL PIN KONFİGÜRASYONU");
-      Serial.println("✅ Pin 2-3:PWM | Pin 6:Far | Pin 7-8:Pan-Tilt | Pin 9-10:Fren");
-      Serial.println("✅ Pin 13:Lazer | Pin 18-21:Encoder | Pin 23:Pixhawk | Pin 26-27:X-Y");
+      executeTestFunction(); // Modüler fonksiyon çağrısı
     }
     
     else {
