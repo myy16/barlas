@@ -16,14 +16,15 @@ from typing import Optional, Tuple, List
 # Mevcut modülleri import et
 from dart_detector import DartDetector
 
-# Arduino Controller Import - Basitleştirilmiş
+# Arduino Controller Import - SADECE GERÇEK CONTROLLER
 try:
-    from arduino_controller_simple import ArduinoPanTiltController
+    from arduino_controller_fixed import BarlasVehicleController, ArduinoPanTiltController
     ARDUINO_AVAILABLE = True
-    print("✅ Arduino Controller (Simple) modülü yüklendi!")
+    print("✅ BARLAS Full Vehicle Controller modülü yüklendi!")
+    print("   🎯 Pan-Tilt | 🚗 Motor | 🛑 Fren | 💡 Far | 📊 Encoder sistemi hazır")
 except ImportError:
     ARDUINO_AVAILABLE = False
-    print("⚠️ Arduino Controller bulunamadı, simülatör kullanılacak")
+    print("⚠️ BARLAS Controller bulunamadı!")
 
 
 class YOLOArduinoDartSystem:
@@ -110,9 +111,11 @@ class YOLOArduinoDartSystem:
                     print(f"[YOLOArduinoSystem] 🔧 Windows için port düzeltildi: {port_to_try}")
                 
                 try:
-                    arduino = ArduinoPanTiltController(port=port_to_try, baud_rate=9600, timeout=2)
+                    # YENİ: BARLAS Full Vehicle Controller kullan
+                    arduino = BarlasVehicleController(port=port_to_try, baud_rate=9600, timeout=2)
                     if arduino.connect():
-                        print(f"[YOLOArduinoSystem] ✅ Manuel Arduino bağlandı: {port_to_try}")
+                        print(f"[YOLOArduinoSystem] ✅ Manuel BARLAS Araç bağlandı: {port_to_try}")
+                        print(f"   🎯 Pan-Tilt | 🚗 Motor | 🛑 Fren | 💡 Far | 📊 Encoder aktif")
                         return arduino
                     else:
                         arduino.disconnect()
@@ -130,11 +133,12 @@ class YOLOArduinoDartSystem:
             
             for port in ports_to_try:
                 try:
-                    print(f"[YOLOArduinoSystem] 🔍 Arduino bağlantısı deneniyor: {port}")
-                    # Arduino basit versiyonu - daha hızlı bağlantı
-                    arduino = ArduinoPanTiltController(port=port, baud_rate=9600, timeout=2)
+                    print(f"[YOLOArduinoSystem] 🔍 BARLAS Araç bağlantısı deneniyor: {port}")
+                    # YENİ: BARLAS Full Vehicle Controller - daha hızlı bağlantı
+                    arduino = BarlasVehicleController(port=port, baud_rate=9600, timeout=2)
                     if arduino.connect():
-                        print(f"[YOLOArduinoSystem] ✅ Gerçek Arduino bağlandı: {port}")
+                        print(f"[YOLOArduinoSystem] ✅ Gerçek BARLAS Araç bağlandı: {port}")
+                        print(f"   🎯 Pan-Tilt | 🚗 Motor | 🛑 Fren | 💡 Far | 📊 Encoder sistemi aktif")
                         return arduino
                     else:
                         print(f"[YOLOArduinoSystem] ❌ Port yanıt vermiyor: {port}")
@@ -397,12 +401,9 @@ class YOLOArduinoDartSystem:
                 else:
                     print("[YOLOArduinoSystem] ⚠️ Lazer açılamadı")
         elif key == ord('c'):
-            if isinstance(self.arduino_controller, ArduinoSimulator):
-                self.arduino_controller.stop_scanning()
             self.center_position()
-            if isinstance(self.arduino_controller, ArduinoSimulator):
-                self.arduino_controller.start_scanning()
         elif key == ord('r'):
+            # Reset işlemleri
             self.current_dart_target = None
             self.targeting_start_time = 0
             # RESET SIRASİNDA LAZERİ KAPAT
@@ -410,9 +411,6 @@ class YOLOArduinoDartSystem:
                 self.disable_laser()
                 self.laser_enabled_by_system = False
                 print("[YOLOArduinoSystem] ⚫ Lazer kapatıldı - sistem resetlendi")
-            # Taramaya devam et
-            if isinstance(self.arduino_controller, ArduinoSimulator):
-                self.arduino_controller.resume_scanning()
             print("[YOLOArduinoSystem] 🔄 Hedefleme resetlendi")
         elif key == ord('f'):
             self.show_all_detections = not self.show_all_detections
@@ -437,26 +435,17 @@ class YOLOArduinoDartSystem:
             self.confidence_threshold = max(0.1, self.confidence_threshold - 0.05)
             print(f"[YOLOArduinoSystem] Güven eşiği: {self.confidence_threshold:.2f}")
         elif key == ord('t'):
-            # Tarama modu açma/kapama
-            if isinstance(self.arduino_controller, ArduinoSimulator):
-                if self.arduino_controller.is_scanning:
-                    self.arduino_controller.stop_scanning()
-                    print("[YOLOArduinoSystem] 🔄 Tarama DURDURULDU")
-                else:
-                    self.arduino_controller.start_scanning()
-                    print("[YOLOArduinoSystem] 🔄 Tarama BAŞLATILDI")
+            # Tarama modu - gerçek sistemde desteklenmiyor
+            print("[YOLOArduinoSystem] ⚠️ Tarama modu sadece simülatörde çalışır")
         elif key == ord('1'):
-            # Tarama hızı - yavaş
-            if isinstance(self.arduino_controller, ArduinoSimulator):
-                self.arduino_controller.set_scanning_speed(2.0)
+            # Tarama hızı ayarları - gerçek sistemde desteklenmiyor
+            print("[YOLOArduinoSystem] ⚠️ Tarama hızı ayarı sadece simülatörde çalışır")
         elif key == ord('2'):
-            # Tarama hızı - orta
-            if isinstance(self.arduino_controller, ArduinoSimulator):
-                self.arduino_controller.set_scanning_speed(5.0)
+            # Tarama hızı ayarları - gerçek sistemde desteklenmiyor
+            print("[YOLOArduinoSystem] ⚠️ Tarama hızı ayarı sadece simülatörde çalışır")
         elif key == ord('3'):
-            # Tarama hızı - hızlı
-            if isinstance(self.arduino_controller, ArduinoSimulator):
-                self.arduino_controller.set_scanning_speed(10.0)
+            # Tarama hızı ayarları - gerçek sistemde desteklenmiyor
+            print("[YOLOArduinoSystem] ⚠️ Tarama hızı ayarı sadece simülatörde çalışır")
         
         return True
     
@@ -479,18 +468,9 @@ class YOLOArduinoDartSystem:
         try:
             print(f"[Hedefleme] 🎯 Hedefe kilitlenme başlatılıyor: ({pixel_x}, {pixel_y})")
             
-            # Simülatör kontrolü
-            if isinstance(self.arduino_controller, ArduinoPanTiltController):
-                # Simülatör için sadece pozisyon değiştir, lazer açma
-
-                target_pan, target_tilt = self.arduino_controller.pixel_to_angle(
-                    pixel_x, pixel_y, self.frame_width, self.frame_height)
-                return self.arduino_controller.move_to_position(target_pan, target_tilt)
-            
-            # GERÇEKarduino kontrolü - YENİ YÖNTEM!
-            else:
-                print("[Hedefleme] 🤖 Gerçek Arduino - YENİ YOLO→Arduino fonksiyonu kullanılıyor")
-                return self.send_yolo_data_to_arduino(pixel_x, pixel_y)
+            # Gerçek Arduino kontrolü - YENİ YOLO→Arduino fonksiyonu
+            print("[Hedefleme] 🤖 Gerçek Arduino - YENİ YOLO→Arduino fonksiyonu kullanılıyor")
+            return self.send_yolo_data_to_arduino(pixel_x, pixel_y)
                 
         except Exception as e:
             print(f"[YOLOArduinoSystem] 💥 Hedefleme hatası: {e}")
