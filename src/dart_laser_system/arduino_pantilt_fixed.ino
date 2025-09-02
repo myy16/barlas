@@ -1,8 +1,8 @@
 /*
  * BARLAS HIBRID SISTEM - ARDUINO KONTROL KODU
- * Tam Entegrasyonlu Sürüm: Pan-Tilt + Motor + Fren + Far + Encoder
+ * Tam Entegrasyonlu Sürüm: Pan-Tilt + Fren Servo + Röle + Encoder
  * 
- * Çalışan encoder, fren ve far kodlarınızı kullanır!
+ * Arkadaşların çalışan fren servo + röle kodları entegre edildi!
  */
 
 #include <Servo.h>
@@ -10,89 +10,204 @@
 // ===== SERVO KONTROL =====
 Servo panServo;
 Servo tiltServo;
-Servo servo3;   // Ek servo
-Servo servo4;   // Ek servo
+
+// --- Fren Servo tanımları (Arkadaşların kodu) ---
+Servo frenServo1;
+Servo frenServo2;
 
 // ===== PIN TANIMLAMALARI =====
-// GERÇEK DONANIM KONFIGÜRASYONU
+// GERÇEK DONANIM KONFIGÜRASYONU + Arkadaşların pin konfigürasyonu
 
 // Lazer Modülü
 int laserPin = 13;
 
-// Röle Kontrolleri (Pin 22-23)
-int headlightPin = 22;   // Röle 1 - Far kontrolü  
-int relay2Pin = 23;      // Röle 2 - Ek kontrol
-
-// Encoder Pinleri (Pin 2-3, 18-19 Interrupt)
-int encoder1PinA = 2;    // Sol Encoder A kanalı (Interrupt 0)
-int encoder1PinB = 3;    // Sol Encoder B kanalı (Interrupt 1)
-int encoder2PinA = 18;   // Sağ Encoder A kanalı (Interrupt 5)
-int encoder2PinB = 19;   // Sağ Encoder B kanalı (Interrupt 4)
-
-// Servo Kontrolleri (Pin 6,7,8,9)
+// Pan-Tilt Servo Kontrolleri 
 int panServoPin = 6;     // Pan servo
 int tiltServoPin = 7;    // Tilt servo
-int servo3Pin = 8;       // Ek servo 3
-int servo4Pin = 9;       // Ek servo 4
+
+// --- Fren Servo Pinleri (Arkadaşların kodu) ---
+const int servoPin1 = 9;   // Fren servo 1
+const int servoPin2 = 10;  // Fren servo 2
+const int pwmServoPin = 3; // PWM giriş (Servo kontrol)
+
+// --- Röle Pinleri (Arkadaşların kodu) ---
+const int roleOut = 8;     // Röle çıkış
+const int pwmRolePin = 4;  // PWM giriş (Röle kontrol)
+
+// Encoder Pinleri (Pin 2-3, 18-19 Interrupt) - Pin 2,3 Fren ile çakışıyor, 18-19 kullanılacak
+int encoder1PinA = 18;   // Sol Encoder A kanalı (Interrupt 5)
+int encoder1PinB = 19;   // Sol Encoder B kanalı (Interrupt 4)
+int encoder2PinA = 20;   // Sağ Encoder A kanalı (Interrupt 3) - Yeni pin
+int encoder2PinB = 21;   // Sağ Encoder B kanalı (Interrupt 2) - Yeni pin
 
 // 5V Regülatör kontrolü (güç yönetimi)
-int regulator5VPin = 10; // 5V regülatör enable/disable
+int regulator5VPin = 22; // 5V regülatör enable/disable (pin değişti)
+
+// --- Fren Servo Değişkenleri (Arkadaşların kodu) ---
+int frenCekAci1 = -40;
+int frenCekAci2 = -40;
+int servoOffset1, servoOffset2;
+
+// --- PWM ölçüm değişkenleri (Arkadaşların kodu) ---
+volatile unsigned long servoRiseTime = 0;
+volatile unsigned long servoPulse = 0;
+volatile unsigned long roleRiseTime = 0;
+volatile unsigned long rolePulse = 0;
 
 // ===== GLOBAL DEĞİŞKENLER =====
 volatile long encoder1Count = 0;
 volatile long encoder2Count = 0;
-boolean headlightActive = false;
-boolean relay2Active = false;
 boolean regulator5VActive = true;  // 5V regülatör durumu
 
 // Kontrol modu
 String controlMode = "SERIAL";  // SERIAL veya PIXHAWK
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
+  Serial.println("BARLAS HIBRID SISTEM BAŞLADI!");
   
-  // ===== SERVO BAŞLATMA =====
-  panServo.attach(panServoPin);     // Pan servo (Pin 6)
-  tiltServo.attach(tiltServoPin);   // Tilt servo (Pin 7)
-  servo3.attach(servo3Pin);         // Ek servo 3 (Pin 8)
-  servo4.attach(servo4Pin);         // Ek servo 4 (Pin 9)
+  // ===== SERVO BAĞLANTILARI =====
+  panServo.attach(panServoPin);
+  tiltServo.attach(tiltServoPin);
   
-  // Başlangıç pozisyonları
+  // --- Fren servo bağlantıları (Arkadaşların kodu) ---
+  frenServo1.attach(servoPin1);
+  frenServo2.attach(servoPin2);
+  
+  // Servo başlangıç kalibrasyonu
+  servoOffset1 = 90 + frenCekAci1;
+  servoOffset2 = 90 + frenCekAci2;
+  
+  frenServo1.write(90); // Nötr pozisyon
+  frenServo2.write(90);
+  
+  // ===== PIN MODU AYARLARI =====
+  pinMode(laserPin, OUTPUT);
+  pinMode(regulator5VPin, OUTPUT);
+  pinMode(roleOut, OUTPUT);
+  
+  // PWM giriş pinleri
+  pinMode(pwmServoPin, INPUT);
+  pinMode(pwmRolePin, INPUT);
+  
+  // ===== ENCODER INTERRUPT AYARLARI =====
+  // Encoder 1 (Sol) - Pin 18,19
+  pinMode(encoder1PinA, INPUT_PULLUP);
+  pinMode(encoder1PinB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(encoder1PinA), updateEncoder1, CHANGE);
+  
+  // Encoder 2 (Sağ) - Pin 20,21
+  pinMode(encoder2PinA, INPUT_PULLUP);
+  pinMode(encoder2PinB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(encoder2PinA), updateEncoder2, CHANGE);
+  
+  // --- PWM Interrupt ayarları (Arkadaşların kodu) ---
+  attachInterrupt(digitalPinToInterrupt(pwmServoPin), servoRiseInterrupt, RISING);
+  attachInterrupt(digitalPinToInterrupt(pwmServoPin), servoFallInterrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pwmRolePin), roleRiseInterrupt, RISING);
+  attachInterrupt(digitalPinToInterrupt(pwmRolePin), roleFallInterrupt, FALLING);
+  
+  // ===== BAŞLANGIÇ AYARLARI =====
+  digitalWrite(laserPin, LOW);
+  digitalWrite(regulator5VPin, HIGH); // 5V regülatör aktif
+  digitalWrite(roleOut, LOW);         // Röle kapalı
+  
+  // Pan-Tilt başlangıç pozisyonu
   panServo.write(90);
   tiltServo.write(90);
-  servo3.write(90);
-  servo4.write(90);
   
-  // ===== PIN KONFIGÜRASYONU =====
-  pinMode(laserPin, OUTPUT);
-  pinMode(headlightPin, OUTPUT);    // Röle 1 (Pin 22)
-  pinMode(relay2Pin, OUTPUT);       // Röle 2 (Pin 23)
-  pinMode(regulator5VPin, OUTPUT);  // 5V Regülatör (Pin 10)
-  
-  // Encoder pinleri
-  pinMode(encoder1PinA, INPUT_PULLUP);  // Pin 2
-  pinMode(encoder1PinB, INPUT_PULLUP);  // Pin 3
-  pinMode(encoder2PinA, INPUT_PULLUP);  // Pin 18
-  pinMode(encoder2PinB, INPUT_PULLUP);  // Pin 19
-  
-  // ===== INTERRUPT BAŞLATMA =====
-  attachInterrupt(digitalPinToInterrupt(encoder1PinA), encoder1ISR, CHANGE);  // Pin 2
-  attachInterrupt(digitalPinToInterrupt(encoder1PinB), encoder1ISR, CHANGE);  // Pin 3
-  attachInterrupt(digitalPinToInterrupt(encoder2PinA), encoder2ISR, CHANGE);  // Pin 18
-  attachInterrupt(digitalPinToInterrupt(encoder2PinB), encoder2ISR, CHANGE);  // Pin 19
-  
-  // ===== BAŞLANGIÇ DURUMU =====
-  digitalWrite(laserPin, LOW);          // Lazer kapalı
-  digitalWrite(headlightPin, LOW);      // Far kapalı
-  digitalWrite(relay2Pin, LOW);         // Röle 2 kapalı
-  digitalWrite(regulator5VPin, HIGH);   // 5V regülatör açık
-  
-  Serial.println("BARLAS Arduino Ready - GERÇEK PIN KONFIGÜRASYONU");
-  Serial.println("Röle: Pin 22-23 | Encoder: Pin 2-3,18-19 | Servo: Pin 6-9");
+  delay(1000);
+  Serial.println("SİSTEM HAZIR!");
+  Serial.println("KOMUTLAR: laser_on, laser_off, move_pan_90, fren_uygula, fren_birak, role_on, role_off");
 }
+// ===== PWM INTERRUPT FONKSİYONLARI (Arkadaşların Kodu) =====
+
+// Servo PWM interrupt fonksiyonları
+void servoRiseInterrupt() {
+  servoRiseTime = micros();
+}
+
+void servoFallInterrupt() {
+  servoPulse = micros() - servoRiseTime;
+}
+
+// Röle PWM interrupt fonksiyonları  
+void roleRiseInterrupt() {
+  roleRiseTime = micros();
+}
+
+void roleFallInterrupt() {
+  rolePulse = micros() - roleRiseTime;
+}
+
+// ===== ENCODER INTERRUPT FONKSİYONLARI =====
+
+// Encoder 1 (Sol) interrupt - Pin 18
+void updateEncoder1() {
+  int MSB = digitalRead(encoder1PinA);
+  int LSB = digitalRead(encoder1PinB);
+  
+  int encoded = (MSB << 1) | LSB;
+  int sum = (encoder1Count << 2) | encoded;
+  
+  if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) encoder1Count++;
+  if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) encoder1Count--;
+}
+
+// Encoder 2 (Sağ) interrupt - Pin 20  
+void updateEncoder2() {
+  int MSB = digitalRead(encoder2PinA);
+  int LSB = digitalRead(encoder2PinB);
+  
+  int encoded = (MSB << 1) | LSB;
+  int sum = (encoder2Count << 2) | encoded;
+  
+  if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) encoder2Count++;
+  if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) encoder2Count--;
 }
 
 void loop() {
+  // === PWM OKUMA VE FİLTRELEME (Arkadaşların kodu) ===
+  static unsigned long lastServoTime = 0;
+  static unsigned long lastRoleTime = 0;
+  
+  // Servo PWM oku (her 20ms)
+  if (millis() - lastServoTime > 20) {
+    unsigned long pulseWidth = servoPulse; // Atom değer okuma
+    
+    if (pulseWidth > 800 && pulseWidth < 2200) { // Geçerli PWM aralığı
+      int servoAngle = map(pulseWidth, 1000, 2000, 0, 180);
+      
+      // Fren servo kontrolü
+      if (servoAngle < 85) { // Fren uygula
+        frenServo1.write(servoOffset1);
+        frenServo2.write(servoOffset2);
+      } else if (servoAngle > 95) { // Fren bırak
+        frenServo1.write(90);
+        frenServo2.write(90);
+      }
+      // 85-95 arası nötr bölge - değişiklik yapma
+    }
+    lastServoTime = millis();
+  }
+  
+  // Röle PWM oku (her 50ms)
+  if (millis() - lastRoleTime > 50) {
+    unsigned long pulseWidth = rolePulse; // Atom değer okuma
+    
+    if (pulseWidth > 800 && pulseWidth < 2200) { // Geçerli PWM aralığı
+      int roleValue = map(pulseWidth, 1000, 2000, 0, 180);
+      
+      if (roleValue > 90) {
+        digitalWrite(roleOut, HIGH); // Röle aç
+      } else {
+        digitalWrite(roleOut, LOW);  // Röle kapat
+      }
+    }
+    lastRoleTime = millis();
+  }
+  
+  // === SERİ KOMUT İŞLEME ===
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
@@ -103,36 +218,74 @@ void loop() {
       int comma2 = cmd.lastIndexOf(',');
       int pan = cmd.substring(comma1 + 1, comma2).toInt();
       int tilt = cmd.substring(comma2 + 1).toInt();
-      panServo.write(pan);   // Pin 6
-      tiltServo.write(tilt); // Pin 7
-      Serial.println("Moved");
-    }
-    
-    // ===== SERVO KOMUTLARI =====
-    else if (cmd.startsWith("SERVO3")) {
-      int comma = cmd.indexOf(',');
-      int angle = cmd.substring(comma + 1).toInt();
-      servo3.write(angle);   // Pin 8
-      Serial.println("Servo3 " + String(angle));
-    }
-    else if (cmd.startsWith("SERVO4")) {
-      int comma = cmd.indexOf(',');
-      int angle = cmd.substring(comma + 1).toInt();
-      servo4.write(angle);   // Pin 9
-      Serial.println("Servo4 " + String(angle));
+      panServo.write(pan);
+      tiltServo.write(tilt);
+      Serial.println("Pan-Tilt moved: " + String(pan) + "," + String(tilt));
     }
     
     // ===== LAZER KOMUTLARI =====
-    else if (cmd == "LASER,ON") {
-      digitalWrite(laserPin, HIGH);  // Pin 13
+    else if (cmd == "LASER,ON" || cmd == "laser_on") {
+      digitalWrite(laserPin, HIGH);
       Serial.println("Laser ON");
     }
-    else if (cmd == "LASER,OFF") {
-      digitalWrite(laserPin, LOW);   // Pin 13
+    else if (cmd == "LASER,OFF" || cmd == "laser_off") {
+      digitalWrite(laserPin, LOW);
       Serial.println("Laser OFF");
     }
     
-    // ===== RÖLE KOMUTLARI =====
+    // ===== MANUEL FREN KOMUTLARI =====
+    else if (cmd == "fren_uygula") {
+      frenServo1.write(servoOffset1);
+      frenServo2.write(servoOffset2);
+      Serial.println("Manuel fren uygulandı");
+    }
+    else if (cmd == "fren_birak") {
+      frenServo1.write(90);
+      frenServo2.write(90);
+      Serial.println("Manuel fren bırakıldı");
+    }
+    
+    // ===== MANUEL RÖLE KOMUTLARI =====
+    else if (cmd == "role_on") {
+      digitalWrite(roleOut, HIGH);
+      Serial.println("Röle açıldı");
+    }
+    else if (cmd == "role_off") {
+      digitalWrite(roleOut, LOW);
+      Serial.println("Röle kapatıldı");
+    }
+    
+    // ===== ENCODER OKUMA =====
+    else if (cmd == "encoder_read") {
+      Serial.print("Encoder1: ");
+      Serial.print(encoder1Count);
+      Serial.print(" | Encoder2: ");
+      Serial.println(encoder2Count);
+    }
+    else if (cmd == "encoder_reset") {
+      encoder1Count = 0;
+      encoder2Count = 0;
+      Serial.println("Encoders reset");
+    }
+    
+    // ===== PWM DURUM OKUMA =====
+    else if (cmd == "pwm_status") {
+      Serial.print("Servo PWM: ");
+      Serial.print(servoPulse);
+      Serial.print("μs | Role PWM: ");
+      Serial.print(rolePulse);
+      Serial.println("μs");
+    }
+    
+    // ===== SISTEM BİLGİLERİ =====
+    else if (cmd == "status") {
+      Serial.println("=== BARLAS SİSTEM DURUM ===");
+      Serial.print("Encoder1: "); Serial.println(encoder1Count);
+      Serial.print("Encoder2: "); Serial.println(encoder2Count);
+      Serial.print("Servo PWM: "); Serial.print(servoPulse); Serial.println("μs");
+      Serial.print("Role PWM: "); Serial.print(rolePulse); Serial.println("μs");
+      Serial.println("========================");
+    }
     else if (cmd == "HEADLIGHT_ON") {
       digitalWrite(headlightPin, HIGH);  // Pin 22
       headlightActive = true;

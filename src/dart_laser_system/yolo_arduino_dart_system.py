@@ -90,12 +90,18 @@ class YOLOArduinoDartSystem:
         self.show_all_detections = True
         self.show_crosshair = True
         
-        # Lazer durumu - BAŞLANGIÇTA KAPALI!
+        # ===== YENİ ATIŞ MODU SİSTEMİ =====
+        self.shooting_mode_active = False  # Atış modu durumu
+        self.safe_pan_angle = 0           # Güvenli pan açısı (0° - en sol/başlangıç)
+        self.safe_tilt_angle = 0          # Güvenli tilt açısı (0° - en aşağı/başlangıç)
         self.laser_enabled_by_system = False
-        self.ensure_laser_off_at_startup() 
+        
+        # BAŞLANGIÇTA GÜVENLİ POZİSYONA GİT
+        self.set_safe_driving_position()
         
         print("[YOLOArduinoSystem] 🎮 Sistem hazır!")
-        print("[YOLOArduinoSystem] ⚫ Lazer başlangıçta KAPALI - güvenlik önlemi")
+        print("[YOLOArduinoSystem] 🚗 SÜRÜŞ MODU - Pan-Tilt başlangıç pozisyonu (0°, 0°)")
+        print("[YOLOArduinoSystem] ⚫ Atış modu: Pin 13 veya Pin 23 HIGH sinyali ile aktif olur")
     
     def initialize_arduino(self):
         """Arduino Controller başlat - Gerçek veya Simülatör"""
@@ -149,6 +155,69 @@ class YOLOArduinoDartSystem:
     
         return ArduinoPanTiltController()
     
+    def set_safe_driving_position(self):
+        """Güvenli sürüş pozisyonuna geç - Pan-Tilt aşağı bakacak"""
+        try:
+            # Pan-Tilt'i güvenli pozisyona getir
+            success = self.arduino_controller.move_to_position(self.safe_pan_angle, self.safe_tilt_angle)
+            if success:
+                print(f"[YOLOArduinoSystem] 🚗 Güvenli sürüş pozisyonu: Pan={self.safe_pan_angle}°, Tilt={self.safe_tilt_angle}° (0,0 başlangıç pozisyonu)")
+            
+            # Lazeri kapat
+            self.disable_laser()
+            self.laser_enabled_by_system = False
+            
+            # Atış modunu deaktive et
+            self.shooting_mode_active = False
+            print("[YOLOArduinoSystem] ✅ Sürüş modu aktif - Atış sistemi güvenli")
+            
+        except Exception as e:
+            print(f"[YOLOArduinoSystem] ⚠️ Güvenli pozisyon hatası: {e}")
+    
+    def check_shooting_mode_activation(self) -> bool:
+        """
+        Pin 13 veya Pin 23'ten HIGH sinyali kontrolü
+        Gerçek implementasyon Arduino'dan seri ile sinyalleri okuyacak
+        """
+        try:
+            # GERÇEK UYGULAMA: Arduino'dan pin durumlarını oku
+            # Şu anda manuel kontrol için klavye kullanıyoruz
+            
+            # Arduino'dan pin durumunu oku (eğer bu fonksiyonellik varsa)
+            if hasattr(self.arduino_controller, 'read_pin_status'):
+                pin13_status = self.arduino_controller.read_pin_status(13)
+                pin23_status = self.arduino_controller.read_pin_status(23)
+                return pin13_status or pin23_status
+            
+            # Şimdilik mevcut shooting_mode_active durumunu döndür
+            return self.shooting_mode_active
+            
+        except Exception as e:
+            print(f"[YOLOArduinoSystem] Pin okuma hatası: {e}")
+            return False
+    
+    def activate_shooting_mode(self):
+        """Atış modunu aktive et"""
+        if not self.shooting_mode_active:
+            self.shooting_mode_active = True
+            print("[YOLOArduinoSystem] 🎯 ATIŞ MODU AKTİF!")
+            print("[YOLOArduinoSystem] 🎯 YOLO dart targeting başlıyor...")
+            print("[YOLOArduinoSystem] 🔴 Lazer sistemi hazır")
+    
+    def deactivate_shooting_mode(self):
+        """Atış modunu deaktive et - Güvenli pozisyona dön"""
+        if self.shooting_mode_active:
+            print("[YOLOArduinoSystem] ⚫ ATIŞ MODU KAPANDI")
+            
+            # Hedeflemeyi sıfırla
+            self.current_dart_target = None
+            self.targeting_start_time = 0
+            
+            # Güvenli pozisyona geri dön
+            self.set_safe_driving_position()
+            
+            print("[YOLOArduinoSystem] 🚗 Sürüş moduna geri dönüldü")
+    
     def ensure_laser_off_at_startup(self):
         """Sistem başlangıcında lazeri kapalı yap"""
         try:
@@ -195,18 +264,18 @@ class YOLOArduinoDartSystem:
         print("=" * 60)
         print("📋 Kontroller:")
         print("  'q' / ESC  - Çıkış")
+        print("  'm'        - Atış modu açma/kapama (Pin 13/23 simülasyonu)")
         print("  'space'    - Manuel lazer açma/kapama") 
         print("  'c'        - Merkez pozisyon")
-        print("  'wasd'     - Manuel servo hareket (±5°)")
+        print("  'r'        - Reset (Sürüş: Güvenli pozisyon, Atış: Hedef reset)")
+        print("  'wasd'     - Manuel servo hareket (SADECE ATIŞ MODU)")
         print("  '+/-'      - Güven eşiği ayarı")
-        print("  'r'        - Reset hedefleme")
         print("  'f'        - Tüm tespitleri göster/gizle")
         print("  'x'        - Crosshair göster/gizle")
-        print("  't'        - Tarama modu açma/kapama")
-        print("  '1/2/3'    - Tarama hızı (yavaş/orta/hızlı)")
-        print("  'Mouse'    - Manuel hedefleme")
+        print("  'Mouse'    - Manuel hedefleme (SADECE ATIŞ MODU)")
         print("=" * 60)
-        print("🎯 Kameraya DART gösterin!")
+        print("🚗 BAŞLANGIÇ: SÜRÜŞ MODU - Pan-Tilt başlangıç pozisyonu (0°, 0°)")
+        print("🎯 ATIş MODU: 'M' tuşu veya Pin 13/23 HIGH sinyali")
         print()
         
         # OpenCV penceresi
@@ -229,32 +298,51 @@ class YOLOArduinoDartSystem:
                 current_time = start_time
                 
                 try:
-                    # Dart tespiti
-                    detections = self.dart_detector.detect_darts(frame)
-                    
-                    # Güvenli dart'ları filtrele
-                    valid_detections = [d for d in detections 
-                                      if d['confidence'] >= self.confidence_threshold]
-                    
+                    # Dart tespiti - SADECE ATIŞ MODU AKTİFKEN
+                    detections = []
+                    valid_detections = []
                     best_dart = None
                     best_dart_center = None
                     
-                    if valid_detections:
-                        # En iyi dart'ı seç (güven * boyut)
-                        best_dart = max(valid_detections, 
-                                       key=lambda d: d['confidence'] * 
-                                       (d['bbox'][2] * d['bbox'][3]))
-                        
-                        # Merkez koordinatını al
-                        if 'refined_center' in best_dart and best_dart['refined_center']:
-                            best_dart_center = best_dart['refined_center']
-                        else:
-                            # YOLO bbox merkezi
-                            x, y, w, h = best_dart['bbox']
-                            best_dart_center = (x + w//2, y + h//2)
+                    # Pin durumunu kontrol et (atış modu aktivasyonu)
+                    shooting_mode_should_be_active = self.check_shooting_mode_activation()
                     
-                    # Hedefleme logic
-                    if best_dart_center:
+                    # Atış modu durumu değişikliği
+                    if shooting_mode_should_be_active and not self.shooting_mode_active:
+                        self.activate_shooting_mode()
+                    elif not shooting_mode_should_be_active and self.shooting_mode_active:
+                        self.deactivate_shooting_mode()
+                    
+                    # SADECE ATIŞ MODU AKTİFKEN YOLO ÇALIŞTIR
+                    if self.shooting_mode_active:
+                        # Dart tespiti yap
+                        detections = self.dart_detector.detect_darts(frame)
+                        
+                        # Güvenli dart'ları filtrele
+                        valid_detections = [d for d in detections 
+                                          if d['confidence'] >= self.confidence_threshold]
+                        
+                        if valid_detections:
+                            # En iyi dart'ı seç (güven * boyut)
+                            best_dart = max(valid_detections, 
+                                           key=lambda d: d['confidence'] * 
+                                           (d['bbox'][2] * d['bbox'][3]))
+                            
+                            # Merkez koordinatını al
+                            if 'refined_center' in best_dart and best_dart['refined_center']:
+                                best_dart_center = best_dart['refined_center']
+                            else:
+                                # YOLO bbox merkezi
+                                x, y, w, h = best_dart['bbox']
+                                best_dart_center = (x + w//2, y + h//2)
+                    
+                    else:
+                        # SÜRÜŞ MODU - YOLO çalışmıyor, güvenli pozisyonda
+                        print("[YOLOArduinoSystem] 🚗 Sürüş modu - YOLO pasif")
+                    
+                    # HEDEFLEME LOGİC - SADECE ATIŞ MODUNDA
+                    # HEDEFLEME LOGİC - SADECE ATIŞ MODUNDA
+                    if self.shooting_mode_active and best_dart_center:
                         target_x, target_y = best_dart_center
                         
                         # Yeni hedef mi?
@@ -262,7 +350,7 @@ class YOLOArduinoDartSystem:
                             self.current_dart_target = best_dart_center
                             self.targeting_start_time = current_time
                             method = "Hough Circle" if best_dart.get('refined_center') else "YOLO BBox"
-                            print(f"[YOLOArduinoSystem] 🎯 YENİ DART TESPIT: {method} - ({target_x}, {target_y}), Güven: {best_dart['confidence']:.2f}")
+                            print(f"[ATIŞ MODU] 🎯 YENİ DART TESPIT: {method} - ({target_x}, {target_y}), Güven: {best_dart['confidence']:.2f}")
                         
                         else:
                             # Hedef kararlılık kontrolü
@@ -274,76 +362,68 @@ class YOLOArduinoDartSystem:
                                 
                                 # Kilitlenme süresi doldu mu?
                                 if lock_time >= self.lock_duration:
-                                    # HEDEF KİLİTLENDİ - AMA LAZER HENÜZ AÇMA!
+                                    # HEDEF KİLİTLENDİ
                                     if not self.laser_enabled_by_system:
                                         method = "Hough Circle" if best_dart.get('refined_center') else "YOLO BBox"
-                                        print(f"[YOLOArduinoSystem] 🔥 DART KİLİTLENDİ! {method} Merkez: ({target_x}, {target_y})")
-                                        print(f"[YOLOArduinoSystem] 🚀 Arduino'ya hedefleme komutu gönderiliyor...")
+                                        print(f"[ATIŞ MODU] 🔥 DART KİLİTLENDİ! {method} Merkez: ({target_x}, {target_y})")
+                                        print(f"[ATIŞ MODU] 🚀 Arduino'ya hedefleme komutu gönderiliyor...")
                                         
-                                        # Arduino'ya hedefleme komutu gönder (LAZER AÇMADAN)
-                                        success = self.aim_at_pixel_without_laser(target_x, target_y)
+                                        # Arduino'ya hedefleme komutu gönder
+                                        success = self.send_yolo_data_to_arduino(target_x, target_y)
                                         if success:
-                                            print("[YOLOArduinoSystem] ✅ Hedefleme başarılı! Merkez hizalamaya başlanıyor...")
+                                            print("[ATIŞ MODU] ✅ Hedefleme başarılı!")
                                         else:
-                                            print("[YOLOArduinoSystem] ❌ Hedefleme hatası!")
+                                            print("[ATIŞ MODU] ❌ Hedefleme hatası!")
                                 
-                                # HEDEF KİLİTLİ DURUMDA - SÜREKLİ TAKİP ET
+                                # Hedefi sürekli takip et
                                 self.current_dart_target = best_dart_center
                                 
-                                # KAMERA MERKEZİ HİZALAMA KONTROLÜ VE LAZER AKTİVASYONU
+                                # MERKEZ HİZALAMA KONTROLÜ VE LAZER AKTİVASYONU
                                 center_x = self.frame_width // 2
                                 center_y = self.frame_height // 2
-                                
-                                # Merkez ile hedef arasındaki mesafe
                                 center_distance = math.sqrt((target_x - center_x)**2 + (target_y - center_y)**2)
                                 
-                                # SADECE DART MERKEZDE OLDUĞUNDA LAZER AÇ!
+                                # DART MERKEZDE OLDUĞUNDA LAZER AÇ
                                 if center_distance <= 10:  # 10 piksel tolerans
                                     if not self.laser_enabled_by_system:
-                                        # İLK KEZ MERKEZE GELDİ - LAZER AÇ!
                                         if self.enable_laser():
                                             self.laser_enabled_by_system = True
-                                            print(f"[YOLOArduinoSystem] 🔴 LAZER AKTİF - Hedef merkezde! Mesafe: {center_distance:.1f}px")
+                                            print(f"[ATIŞ MODU] 🔴 LAZER AKTİF - Hedef merkezde! Mesafe: {center_distance:.1f}px")
                                         else:
-                                            print("[YOLOArduinoSystem] ⚠️ Lazer açılamadı")
-                                    else:
-                                        # ZATEN MERKEZDE VE LAZER AÇIK
-                                        print(f"[YOLOArduinoSystem] ✅ HEDEF MERKEZDE KORUNUYOR! Mesafe: {center_distance:.1f}px")
+                                            print("[ATIŞ MODU] ⚠️ Lazer açılamadı")
                                 
                                 else:
-                                    # HEDEF MERKEZ DEĞİL - LAZER KAPALI OLMALI
+                                    # HEDEF MERKEZ DEĞİL - LAZER KAPALI
                                     if self.laser_enabled_by_system:
-                                        # Merkez hizalama kaybedildi, lazeri kapat
                                         self.disable_laser()
                                         self.laser_enabled_by_system = False
-                                        print(f"[YOLOArduinoSystem] ⚫ Lazer kapatıldı - hedef merkez dışına çıktı! Mesafe: {center_distance:.1f}px")
+                                        print(f"[ATIŞ MODU] ⚫ Lazer kapatıldı - hedef merkez dışına çıktı!")
                                     
                                     # Merkez hizalama yap
-                                    print(f"[YOLOArduinoSystem] 🎯 MERKEZ HİZALAMA: Hedef ({target_x},{target_y}) -> Merkez ({center_x},{center_y}), Mesafe: {center_distance:.1f}px")
-                                    
-                                    # Sürekli düzeltme yap
-                                    correction_success = self.aim_at_pixel_without_laser(target_x, target_y)
-                                    if correction_success:
-                                        print("[YOLOArduinoSystem] ✅ Merkez düzeltmesi yapıldı")
-                                    else:
-                                        print("[YOLOArduinoSystem] ⚠️ Merkez düzeltmesi başarısız")
+                                    print(f"[ATIŞ MODU] 🎯 MERKEZ HİZALAMA: Mesafe {center_distance:.1f}px")
+                                    self.send_yolo_data_to_arduino(target_x, target_y)
                             
                             else:
                                 # Hedef değişti
                                 self.current_dart_target = best_dart_center
                                 self.targeting_start_time = current_time
-                                print(f"[YOLOArduinoSystem] 🔄 Dart pozisyon değişti: ({target_x}, {target_y})")
+                                print(f"[ATIŞ MODU] 🔄 Dart pozisyon değişti: ({target_x}, {target_y})")
                     
-                    else:
-                        # Dart bulunamadı
+                    elif self.shooting_mode_active and not best_dart_center:
+                        # ATIŞ MODU AKTİF AMA DART YOK
                         if self.current_dart_target:
-                            print("[YOLOArduinoSystem] ❌ Dart kaybedildi")
+                            print("[ATIŞ MODU] ❌ Dart kaybedildi")
                             self.current_dart_target = None
-                            # HEDEF KAYBEDİLDİĞİNDE LAZERİ KAPAT
                             if self.laser_enabled_by_system:
                                 self.disable_laser()
                                 self.laser_enabled_by_system = False
-                                print("[YOLOArduinoSystem] ⚫ Lazer kapatıldı - hedef kaybedildi")
+                                print("[ATIŞ MODU] ⚫ Lazer kapatıldı - hedef kaybedildi")
+                    
+                    elif not self.shooting_mode_active:
+                        # SÜRÜŞ MODU - Hedefleme sıfırla
+                        if self.current_dart_target:
+                            self.current_dart_target = None
+                            self.targeting_start_time = 0
                     
                     # FPS hesaplama
                     frame_count += 1
@@ -404,14 +484,27 @@ class YOLOArduinoDartSystem:
             self.center_position()
         elif key == ord('r'):
             # Reset işlemleri
-            self.current_dart_target = None
-            self.targeting_start_time = 0
-            # RESET SIRASİNDA LAZERİ KAPAT
-            if self.laser_enabled_by_system:
-                self.disable_laser()
-                self.laser_enabled_by_system = False
-                print("[YOLOArduinoSystem] ⚫ Lazer kapatıldı - sistem resetlendi")
-            print("[YOLOArduinoSystem] 🔄 Hedefleme resetlendi")
+            if self.shooting_mode_active:
+                # Atış modunda reset - sadece hedeflemeyi sıfırla
+                self.current_dart_target = None
+                self.targeting_start_time = 0
+                if self.laser_enabled_by_system:
+                    self.disable_laser()
+                    self.laser_enabled_by_system = False
+                    print("[ATIŞ MODU] ⚫ Lazer kapatıldı - hedefleme resetlendi")
+                print("[ATIŞ MODU] 🔄 Hedefleme resetlendi")
+            else:
+                # Sürüş modunda reset - güvenli pozisyona git
+                self.set_safe_driving_position()
+                print("[SÜRÜŞ MODU] 🔄 Güvenli pozisyona resetlendi")
+        elif key == ord('m'):
+            # MANUEL ATIŞ MODU KONTROLÜ (test için)
+            if self.shooting_mode_active:
+                self.deactivate_shooting_mode()
+                print("[YOLOArduinoSystem] ⚫ MANUEL - Atış modu kapatıldı")
+            else:
+                self.activate_shooting_mode()
+                print("[YOLOArduinoSystem] 🎯 MANUEL - Atış modu açıldı")
         elif key == ord('f'):
             self.show_all_detections = not self.show_all_detections
             status = "AÇIK" if self.show_all_detections else "KAPALI"
@@ -421,13 +514,25 @@ class YOLOArduinoDartSystem:
             status = "AÇIK" if self.show_crosshair else "KAPALI"
             print(f"[YOLOArduinoSystem] Crosshair: {status}")
         elif key == ord('w'):
-            self.move_servo(0, -5)
+            if self.shooting_mode_active:
+                self.move_servo(0, -5)  # Atış modunda servo hareket
+            else:
+                print("[SÜRÜŞ MODU] ⚠️ Servo hareketi atış modunda çalışır")
         elif key == ord('s'):
-            self.move_servo(0, 5)
+            if self.shooting_mode_active:
+                self.move_servo(0, 5)
+            else:
+                print("[SÜRÜŞ MODU] ⚠️ Servo hareketi atış modunda çalışır")
         elif key == ord('a'):
-            self.move_servo(-5, 0)
+            if self.shooting_mode_active:
+                self.move_servo(-5, 0)
+            else:
+                print("[SÜRÜŞ MODU] ⚠️ Servo hareketi atış modunda çalışır")
         elif key == ord('d'):
-            self.move_servo(5, 0)
+            if self.shooting_mode_active:
+                self.move_servo(5, 0)
+            else:
+                print("[SÜRÜŞ MODU] ⚠️ Servo hareketi atış modunda çalışır")
         elif key == ord('+') or key == ord('='):
             self.confidence_threshold = min(1.0, self.confidence_threshold + 0.05)
             print(f"[YOLOArduinoSystem] Güven eşiği: {self.confidence_threshold:.2f}")
@@ -450,15 +555,17 @@ class YOLOArduinoDartSystem:
         return True
     
     def mouse_callback(self, event, x, y, flags, param):
-        """Mouse ile manuel hedefleme"""
+        """Mouse ile manuel hedefleme - SADECE ATIŞ MODUNDA"""
         if event == cv2.EVENT_LBUTTONDOWN:
-            print(f"[YOLOArduinoSystem] 🖱️ Manuel hedef: ({x}, {y})")
-            # MOUSE İLE MANUEL HEDEFLEMEEde LAZER AÇILMAZ
-            success = self.aim_at_pixel_without_laser(x, y)
-            if success:
-                print("[YOLOArduinoSystem] ✅ Manuel hedefleme tamamlandı (lazer kapalı)")
+            if self.shooting_mode_active:
+                print(f"[ATIŞ MODU] 🖱️ Manuel hedef: ({x}, {y})")
+                success = self.send_yolo_data_to_arduino(x, y)
+                if success:
+                    print("[ATIŞ MODU] ✅ Manuel hedefleme tamamlandı")
+                else:
+                    print("[ATIŞ MODU] ❌ Manuel hedefleme hatası")
             else:
-                print("[YOLOArduinoSystem] ❌ Manuel hedefleme hatası")
+                print("[SÜRÜŞ MODU] ⚠️ Manuel hedefleme sadece atış modunda çalışır")
     
     def aim_at_pixel_without_laser(self, pixel_x: int, pixel_y: int) -> bool:
         """
@@ -755,16 +862,14 @@ class YOLOArduinoDartSystem:
         current_pan = getattr(self.arduino_controller, 'current_pan', 0)
         current_tilt = getattr(self.arduino_controller, 'current_tilt', 0)
         laser_active = getattr(self.arduino_controller, 'laser_active', False)
-        is_scanning = getattr(self.arduino_controller, 'is_scanning', False)
-        target_locked = getattr(self.arduino_controller, 'target_locked', False)
         
-        # Lazer durumu metni
-        laser_status = "SYSTEM ON" if self.laser_enabled_by_system else ("MANUAL ON" if laser_active else "OFF")
-        scan_status = "LOCKED" if target_locked else ("ON" if is_scanning else "OFF")
+        # Atış modu durumu
+        mode_text = "ATIŞ MODU" if self.shooting_mode_active else "SÜRÜŞ MODU"
+        mode_color = (0, 255, 255) if self.shooting_mode_active else (255, 255, 255)
         
         arduino_info = [
-            f"Arduino: Pan={current_pan:.1f}° Tilt={current_tilt:.1f}°",
-            f"Laser: {laser_status} | Scan: {scan_status}",
+            f"MOD: {mode_text} | Pan={current_pan:.1f}° Tilt={current_tilt:.1f}°",
+            f"Laser: {'ON' if self.laser_enabled_by_system else 'OFF'} | Pin13/23: {'AKTIF' if self.shooting_mode_active else 'PASİF'}",
             f"Threshold: {self.confidence_threshold:.2f}",
             f"Valid: {len(valid_detections)}/{len(detections)}",
             f"FPS: {fps:.1f} | Process: {process_time:.1f}ms"
@@ -774,22 +879,20 @@ class YOLOArduinoDartSystem:
             cv2.putText(display_frame, info, (10, 25 + i*20),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # Sistem durumu
-        if self.laser_enabled_by_system:
-            status_color = (0, 255, 0)  # Yeşil - sistem lazeri
-            status_text = "LAZER AKTIF - HEDEF KİLİTLİ"
-        elif laser_active:
-            status_color = (0, 255, 255)  # Sarı - manuel lazer
-            status_text = "MANUEL LAZER AKTIF"
-        elif target_locked:
-            status_color = (255, 255, 0)  # Mavi - hedef kilitli ama lazer kapalı
-            status_text = "HEDEF KİLİTLİ - LAZER KAPALI"
-        elif is_scanning:
-            status_color = (255, 0, 255)  # Magenta - tarama aktif
-            status_text = "TARAMA MODU AKTİF"
+        # Sistem durumu metni
+        if self.shooting_mode_active:
+            if self.laser_enabled_by_system:
+                status_color = (0, 255, 0)  # Yeşil - lazer aktif
+                status_text = "ATIŞ MODU AKTİF - LAZER AKTİF"
+            elif self.current_dart_target:
+                status_color = (255, 255, 0)  # Sarı - hedef kilitli
+                status_text = "ATIŞ MODU - HEDEF KİLİTLENİYOR"
+            else:
+                status_color = (0, 255, 255)  # Cyan - atış modu aktif
+                status_text = "ATIŞ MODU AKTİF - DART ARANIYOR"
         else:
-            status_color = (255, 255, 255)  # Beyaz - lazer kapalı
-            status_text = "DART ARANIYOR - TARAMA KAPALI"
+            status_color = (255, 255, 255)  # Beyaz - sürüş modu
+            status_text = "SÜRÜŞ MODU - Pan-Tilt Başlangıç Pozisyonu (0°,0°)"
             
         cv2.putText(display_frame, status_text, (10, display_frame.shape[0] - 60),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
@@ -804,10 +907,10 @@ class YOLOArduinoDartSystem:
         
         # Kontrol bilgileri (sağ alt köşe)
         controls = [
-            "Q/ESC:Quit", "Space:Laser", "C:Center", 
-            "WASD:Move", "+/-:Threshold", "R:Reset",
-            "F:ShowAll", "X:Crosshair", "T:Scan",
-            "1/2/3:Speed", "Mouse:Aim"
+            "Q/ESC:Quit", "M:Atiş/Sürüş", "Space:Laser", 
+            "C:Center", "R:Reset", "F:ShowAll",
+            "X:Crosshair", "+/-:Threshold",
+            "WASD:Move(AtışModu)", "Mouse:Aim(AtışModu)"
         ]
         
         for i, control in enumerate(controls):
